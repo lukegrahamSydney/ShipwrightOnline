@@ -4,6 +4,7 @@
 #include <libultraship/libultra.h>
 #include "global.h"
 
+#define DEKUNUTS_FLOWER 10
 struct EnDekunuts;
 
 typedef void (*EnDekunutsActionFunc)(struct EnDekunuts*, PlayState*);

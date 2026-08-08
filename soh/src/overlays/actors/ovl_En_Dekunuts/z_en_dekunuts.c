@@ -12,7 +12,7 @@
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE)
 
-#define DEKUNUTS_FLOWER 10
+
 
 void EnDekunuts_Init(Actor* thisx, PlayState* play);
 void EnDekunuts_Destroy(Actor* thisx, PlayState* play);

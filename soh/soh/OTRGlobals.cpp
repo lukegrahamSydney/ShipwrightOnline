@@ -83,6 +83,7 @@
 #include "soh/Network/CrowdControl/CrowdControl.h"
 #include "soh/Network/Sail/Sail.h"
 #include "soh/Network/Anchor/Anchor.h"
+#include "soh/Network/ZeldaOnline/ZeldaOnlineClient.hpp"
 #include "Enhancements/game-interactor/GameInteractor.h"
 #include "Enhancements/randomizer/draw.h"
 #include <libultraship/controller/controldeck/ControlDeck.h>
@@ -140,6 +141,7 @@ SpeechSynthesizer* SpeechSynthesizer::Instance;
 CrowdControl* CrowdControl::Instance;
 Sail* Sail::Instance;
 Anchor* Anchor::Instance;
+ZeldaOnline::ZeldaOnlineClient* ZeldaOnline::ZeldaOnlineClient::Instance;
 
 extern "C" char** cameraStrings;
 
@@ -1554,6 +1556,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     CrowdControl::Instance = new CrowdControl();
     Sail::Instance = new Sail();
     Anchor::Instance = new Anchor();
+    ZeldaOnline::ZeldaOnlineClient::Instance = new ZeldaOnline::ZeldaOnlineClient();
 
     OTRMessage_Init();
     OTRAudio_Init();
@@ -1590,6 +1593,9 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     if (CVarGetInteger(CVAR_REMOTE_ANCHOR("Enabled"), 0)) {
         Anchor::Instance->Enable();
     }
+
+    ZeldaOnline::ZeldaOnlineClient::Instance->Enable();
+
     ShipInit::InitAll();
     Rando::StaticData::InitHashMaps();
     OTRGlobals::Instance->gRandoContext->AddExcludedOptions();
@@ -1611,6 +1617,8 @@ extern "C" void DeinitOTR() {
     if (CVarGetInteger(CVAR_REMOTE_ANCHOR("Enabled"), 0)) {
         Anchor::Instance->Disable();
     }
+
+    ZeldaOnline::ZeldaOnlineClient::Instance->Disable();
     SDLNet_Quit();
 
     // Destroying gui here because we have shared ptrs to LUS objects which output to SPDLOG which is destroyed before

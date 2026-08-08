@@ -639,6 +639,7 @@ void Room_Draw(PlayState* play, Room* room, u32 flags) {
 }
 
 void func_80097534(PlayState* play, RoomContext* roomCtx) {
+    int prevRoom = roomCtx->prevRoom.num;
     roomCtx->prevRoom.num = -1;
     roomCtx->prevRoom.segment = NULL;
     func_80031B14(play, &play->actorCtx); // kills all actors without room num set to -1
@@ -658,4 +659,6 @@ void func_80097534(PlayState* play, RoomContext* roomCtx) {
     gSaveContext.ship.stats.tsIdx++;
     gSaveContext.ship.stats.roomNum = roomCtx->curRoom.num;
     gSaveContext.ship.stats.roomTimer = 0;
+
+    GameInteractor_ExecuteOnTransitionRoom();
 }

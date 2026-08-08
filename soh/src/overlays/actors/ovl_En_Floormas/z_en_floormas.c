@@ -78,6 +78,7 @@ static ColliderCylinderInit sCylinderInit = {
     },
     { 25, 40, 0, { 0, 0, 0 } },
 };
+ColliderCylinderInit* gEnFloormasCylinderInit = &sCylinderInit;
 
 static CollisionCheckInfoInit sColChkInfoInit = { 4, 30, 40, 150 };
 
@@ -115,6 +116,8 @@ static DamageTable sDamageTable = {
     /* Hammer jump   */ DMG_ENTRY(4, 0x0),
     /* Unknown 2     */ DMG_ENTRY(0, 0x0),
 };
+
+DamageTable* gFloorMasterDamageTable = &sDamageTable;
 
 static InitChainEntry sInitChain[] = {
     ICHAIN_S8(naviEnemyId, 0x31, ICHAIN_CONTINUE),
@@ -380,6 +383,7 @@ void EnFloormas_SetupMerge(EnFloormas* this) {
 void EnFloormas_SetupSmWait(EnFloormas* this) {
     EnFloormas* parent = (EnFloormas*)this->actor.parent;
     EnFloormas* child = (EnFloormas*)this->actor.child;
+    osSyncPrintf("SetupSmWait this=%p parent=%p child=%p\n", this, this->actor.parent, this->actor.child);
 
     // if this is the last remaining small floor master, kill all.
     if ((parent->actionFunc == EnFloormas_SmWait) && (child->actionFunc == EnFloormas_SmWait)) {

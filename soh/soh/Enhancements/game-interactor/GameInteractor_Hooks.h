@@ -105,6 +105,8 @@ void GameInteractor_ExecuteOnSeqPlayerInit(int32_t playerIdx, int32_t seqId);
 // MARK: - Rando
 void GameInteractor_ExecuteOnRandoEntranceDiscovered(u16 entranceIndex, u8 isReversedEntrance);
 
+//ZO
+void GameInteractor_ExecuteOnTransitionRoom();
 #ifdef __cplusplus
 }
 #endif

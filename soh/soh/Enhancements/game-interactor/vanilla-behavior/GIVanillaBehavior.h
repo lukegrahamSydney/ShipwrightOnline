@@ -3243,6 +3243,10 @@ typedef enum {
     // #### `args`
     // - None
     VB_TEMP_B_RESTORE_SWORDLESS,
+
+
+    //Zelda Online
+    VB_ADVANCE_DAYTIME
 } GIVanillaBehavior;
 
 #endif

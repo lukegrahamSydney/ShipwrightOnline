@@ -10739,6 +10739,10 @@ static EffectBlureInit2 blureSword = {
 
 static Vec3s sSkeletonBaseTransl = { -57, 3377, 0 };
 
+void Player_SetSkinPrefix(Player* self, const char* prefix) {
+    snprintf(self->skinPrefix, sizeof(self->skinPrefix), "%s", prefix);
+}
+
 void Player_InitCommon(Player* this, PlayState* play, FlexSkeletonHeader* skelHeader) {
     this->getItemEntry = (GetItemEntry)GET_ITEM_NONE;
     this->ageProperties = &sAgeProperties[gSaveContext.linkAge];
@@ -10826,7 +10830,9 @@ void Player_Init(Actor* thisx, PlayState* play2) {
         }
         this->currentMask = gSaveContext.ship.maskMemory;
     }
+    
     Player_InitCommon(this, play, gPlayerSkelHeaders[((void)0, gSaveContext.linkAge)]);
+
     // `giObjectSegment` is used for both "get item" objects and title cards. The maximum size for
     // get item objects is 0x2000 (see the assert in func_8083AE40), and the maximum size for
     // title cards is 0x1000 * LANGUAGE_MAX since each title card image includes all languages.
@@ -11556,11 +11562,11 @@ void Player_UpdateCamAndSeqModes(PlayState* play, Player* this) {
     }
 }
 
-static Vec3f D_808547A4 = { 0.0f, 0.5f, 0.0f };
-static Vec3f D_808547B0 = { 0.0f, 0.5f, 0.0f };
+Vec3f D_808547A4 = { 0.0f, 0.5f, 0.0f };
+Vec3f D_808547B0 = { 0.0f, 0.5f, 0.0f };
 
-static Color_RGBA8 D_808547BC = { 255, 255, 100, 255 };
-static Color_RGBA8 D_808547C0 = { 255, 50, 0, 0 };
+Color_RGBA8 D_808547BC = { 255, 255, 100, 255 };
+Color_RGBA8 D_808547C0 = { 255, 50, 0, 0 };
 
 void Player_UpdateBurningDekuStick(PlayState* play, Player* this) {
     f32 temp;
@@ -12350,7 +12356,7 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
     gSPSegment(POLY_OPA_DISP++, 0x0C, cullDList);
     gSPSegment(POLY_XLU_DISP++, 0x0C, cullDList);
 
-    Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, lod,
+    Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, this->skinPrefix[0] == '\0' ? lod : 0,
                     this->currentTunic, this->currentBoots, this->actor.shape.face, overrideLimbDraw,
                     Player_PostLimbDrawGameplay, this);
 

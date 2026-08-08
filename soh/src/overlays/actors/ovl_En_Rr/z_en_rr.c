@@ -671,6 +671,7 @@ void EnRr_Death(EnRr* this, PlayState* play) {
         dropPos.x = this->actor.world.pos.x;
         dropPos.y = this->actor.world.pos.y;
         dropPos.z = this->actor.world.pos.z;
+        
         switch (this->eatenShield) {
             case 1:
                 Item_DropCollectible(play, &dropPos, ITEM00_SHIELD_DEKU);

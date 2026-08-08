@@ -490,8 +490,17 @@ void func_800315AC(PlayState* play, ActorContext* actorCtx);
 void func_80031A28(PlayState* play, ActorContext* actorCtx);
 void func_80031B14(PlayState* play, ActorContext* actorCtx);
 void func_80031C3C(ActorContext* actorCtx, PlayState* play);
+ 
+Actor* Actor_SpawnDirect(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX,
+                         s16 rotY, s16 rotZ, f32 homeposX, f32 homeposY, f32 homeposZ, s16 homerotX, s16 homerotY,
+                         s16 homerotZ, s16 params, int delayInit);
+
 Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 posX, f32 posY, f32 posZ,
                    s16 rotX, s16 rotY, s16 rotZ, s16 params);
+
+Actor* Actor_SpawnAsChildDirect(ActorContext* actorCtx, Actor* parent, PlayState* play, s16 actorId, f32 posX, f32 posY,
+                                f32 posZ, s16 rotX, s16 rotY, s16 rotZ, f32 homeposX, f32 homeposY, f32 homeposZ,
+                                s16 homerotX, s16 homerotY, s16 homerotZ, s16 params, int delayInit);
 Actor* Actor_SpawnAsChild(ActorContext* actorCtx, Actor* parent, PlayState* play, s16 actorId, f32 posX,
                           f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params);
 void Actor_SpawnTransitionActors(PlayState* play, ActorContext* actorCtx);
@@ -2467,6 +2476,7 @@ void func_80838940(Player* this, LinkAnimationHeader* anim, f32 arg2, PlayState*
 
 // #endregion
 
+void Player_SetSkinPrefix(Player* self, const char* prefix);
 #ifdef __cplusplus
 #undef this
 };

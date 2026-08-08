@@ -155,6 +155,7 @@ static AnimationInfo sAnimationInfo[] = {
     { &gGoronAnim_004930, 0.0f, 0.0f, -1.0f, 0x01, -8.0f }, { &gGoronAnim_000750, 1.0f, 0.0f, -1.0f, 0x00, -8.0f },
     { &gGoronAnim_000D5C, 1.0f, 0.0f, -1.0f, 0x00, -8.0f },
 };
+AnimationInfo* gEnGo2AnimationInfo = sAnimationInfo;
 
 static EnGo2DustEffectData sDustEffectData[2][4] = {
     {

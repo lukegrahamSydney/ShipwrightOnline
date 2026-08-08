@@ -29,6 +29,9 @@
 #include "soh/resource/type/scenecommand/SetSoundSettings.h"
 #include "soh/resource/type/scenecommand/SetEchoSettings.h"
 #include "soh/resource/type/scenecommand/SetAlternateHeaders.h"
+
+#include "soh/Network/ZeldaOnline/ZeldaOnlineClient.hpp"
+
 #include <spdlog/spdlog.h>
 
 extern Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName);
@@ -500,6 +503,8 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
 
         if (roomNum >= play->numRooms)
             return 0; // UH OH
+
+        ZeldaOnlineClient_RequestRoomSceneChange(roomCtx->prevRoom.num < 0);
 
         size = static_cast<u32>(play->roomList[roomNum].vromEnd - play->roomList[roomNum].vromStart);
         roomCtx->unk_34 =

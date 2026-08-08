@@ -28,6 +28,7 @@ typedef struct EnDekubaba {
     /* 0x0234 */ CollisionPoly* boundFloor;
     /* 0x0238 */ ColliderJntSph collider;
     /* 0x0258 */ ColliderJntSphElement colliderElements[7];
+
 } EnDekubaba; // size = 0x0418
 
 #endif

@@ -17,6 +17,7 @@
 
 #include "soh/ActorDB.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Network/ZeldaOnline/ZeldaOnlineClient.hpp"
 
 #include <string.h>
 #include <stdlib.h>
@@ -689,7 +690,7 @@ void Flags_SetSwitch(PlayState* play, s32 flag) {
  * Unsets current scene switch flag.
  */
 void Flags_UnsetSwitch(PlayState* play, s32 flag) {
-    u8 previouslyOn = Flags_GetSwitch(play, flag);
+    u8 previouslyOn = Flags_GetSwitch(play, flag) != 0;     // FIXED [ZeldaOnline]
     if (flag < 0x20) {
         play->actorCtx.flags.swch &= ~(1 << flag);
     } else {
@@ -1237,7 +1238,7 @@ void Actor_SetObjectDependency(PlayState* play, Actor* actor) {
     gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[actor->objBankIndex].segment);
 }
 
-void Actor_Init(Actor* actor, PlayState* play) {
+void Actor_Init(Actor* actor, PlayState* play, int delayInit) {
     Actor_SetWorldToHome(actor);
     Actor_SetShapeRotToWorld(actor);
     Actor_SetFocus(actor, 0.0f);
@@ -1253,7 +1254,7 @@ void Actor_Init(Actor* actor, PlayState* play) {
     CollisionCheck_InitInfo(&actor->colChkInfo);
     actor->floorBgId = BGCHECK_SCENE;
     ActorShape_Init(&actor->shape, 0.0f, NULL, 0.0f);
-    if (Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
+    if (!delayInit && Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
         Actor_SetObjectDependency(play, actor);
 
         if (GameInteractor_ShouldActorInit(actor)) {
@@ -2592,7 +2593,6 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
         actorEntry = &play->setupActorList[0];
         for (i = 0; i < play->numSetupActors; i++) {
             Actor* spawnedActor = Actor_SpawnEntry(&play->actorCtx, actorEntry++, play);
-
             // #region SOH [ObjectExtension] ActorListIndex tracking
             SetActorListIndex(spawnedActor, (s16)i);
             // #endregion
@@ -2649,7 +2649,9 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                 }
                 actor = actor->next;
             } else if (!Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
+                gZeldaOnlineEngineCleanup = true;
                 Actor_Kill(actor);
+                gZeldaOnlineEngineCleanup = false;
                 actor = actor->next;
             } else if ((unkFlag && !(actor->flags & unkFlag)) ||
                        (!unkFlag && unkCondition && (sp74 != actor) && (actor != player->naviActor) &&
@@ -3161,6 +3163,7 @@ void func_80031A28(PlayState* play, ActorContext* actorCtx) {
     Actor* actor;
     s32 i;
 
+    gZeldaOnlineEngineCleanup = 1; // SOH [ZeldaOnline]
     for (i = 0; i < ARRAY_COUNT(actorCtx->actorLists); i++) {
         actor = actorCtx->actorLists[i].head;
         while (actor != NULL) {
@@ -3170,6 +3173,7 @@ void func_80031A28(PlayState* play, ActorContext* actorCtx) {
             actor = actor->next;
         }
     }
+    gZeldaOnlineEngineCleanup = 0; // SOH [ZeldaOnline]
 }
 
 u8 sEnemyActorCategories[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS };
@@ -3187,10 +3191,13 @@ void Actor_FreezeAllEnemies(PlayState* play, ActorContext* actorCtx, s32 duratio
     }
 }
 
+// ZeldaOnline 
+//Clearing the room
+extern u8 gZeldaOnlineEngineCleanup;
 void func_80031B14(PlayState* play, ActorContext* actorCtx) {
     Actor* actor;
     s32 i;
-
+    gZeldaOnlineEngineCleanup = 1;
     for (i = 0; i < ARRAY_COUNT(actorCtx->actorLists); i++) {
         actor = actorCtx->actorLists[i].head;
         while (actor != NULL) {
@@ -3208,7 +3215,7 @@ void func_80031B14(PlayState* play, ActorContext* actorCtx) {
             }
         }
     }
-
+    gZeldaOnlineEngineCleanup = 0;
     CollisionCheck_ClearContext(play, &play->colChkCtx);
     actorCtx->flags.tempClear = 0;
     actorCtx->flags.tempSwch &= 0xFFFFFF;
@@ -3219,7 +3226,6 @@ void func_80031B14(PlayState* play, ActorContext* actorCtx) {
 void func_80031C3C(ActorContext* actorCtx, PlayState* play) {
     Actor* actor;
     s32 i;
-
     for (i = 0; i < ARRAY_COUNT(actorCtx->actorLists); i++) {
         actor = actorCtx->actorLists[i].head;
         while (actor != NULL) {
@@ -3320,8 +3326,12 @@ void Actor_FreeOverlay(ActorDBEntry* dbEntry) {
 //      array to spawn An example of what this fixes, is that it allows hookshot to be used as child
 int gMapLoading = 0;
 
-Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX,
-                   s16 rotY, s16 rotZ, s16 params) {
+
+Actor* Actor_SpawnDirect(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX,
+                         s16 rotY, s16 rotZ, f32 homeposX, f32 homeposY, f32 homeposZ, s16 homerotX, s16 homerotY,
+                         s16 homerotZ,
+                         s16 params, int delayInit) {
+
     Actor* actor;
     s32 objBankIndex;
     u32 temp;
@@ -3334,7 +3344,7 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
         // "Actor class addition [%d:%s]"
         osSyncPrintf("アクタークラス追加 [%d:%s]\n", actorId, dbEntry->name);
     }
-
+     
     if (actorCtx->total > ACTOR_NUMBER_MAX) {
         // "Ａｃｔｏｒ set number exceeded"
         osSyncPrintf(VT_COL(YELLOW, BLACK) "Ａｃｔｏｒセット数オーバー\n" VT_RST);
@@ -3346,7 +3356,7 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     if (objBankIndex < 0 && (!gMapLoading || CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemies"), 0))) {
         objBankIndex = 0;
     }
-
+   
     if ((objBankIndex < 0) ||
         ((dbEntry->category == ACTORCAT_ENEMY) && Flags_GetClear(play, play->roomCtx.curRoom.num))) {
         // "No data bank!! <data bank＝%d> (profilep->bank=%d)"
@@ -3366,7 +3376,10 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
         return NULL;
     }
 
+
+    
     // #region SOH [ObjectExtension]
+    actor->zoController = NULL;
     SetActorListIndex(actor, -1);
     // #endregion
 
@@ -3380,6 +3393,7 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     }
 
     memset((u8*)actor, 0, dbEntry->instanceSize);
+
     actor->id = dbEntry->id;
     actor->flags = dbEntry->flags;
 
@@ -3395,18 +3409,21 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     actor->update = dbEntry->update;
     actor->draw = dbEntry->draw;
     actor->room = play->roomCtx.curRoom.num;
-    actor->home.pos.x = posX;
-    actor->home.pos.y = posY;
-    actor->home.pos.z = posZ;
-    actor->home.rot.x = rotX;
-    actor->home.rot.y = rotY;
-    actor->home.rot.z = rotZ;
+    actor->home.pos.x = homeposX;
+    actor->home.pos.y = homeposY;
+    actor->home.pos.z = homeposZ;
+    actor->home.rot.x = homerotX;
+    actor->home.rot.y = homerotY;
+    actor->home.rot.z = homerotZ;
+
+
+
     actor->params = params;
 
     Actor_AddToCategory(actorCtx, actor, dbEntry->category);
 
     temp = gSegments[6];
-    Actor_Init(actor, play);
+    Actor_Init(actor, play, delayInit);
     gSegments[6] = temp;
 
     GameInteractor_ExecuteOnActorSpawn(actor);
@@ -3414,9 +3431,19 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     return actor;
 }
 
-Actor* Actor_SpawnAsChild(ActorContext* actorCtx, Actor* parent, PlayState* play, s16 actorId, f32 posX, f32 posY,
-                          f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params) {
-    Actor* spawnedActor = Actor_Spawn(actorCtx, play, actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
+// ZeldaOnline
+Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX,
+                   s16 rotY, s16 rotZ, s16 params) {
+
+    return ZeldaOnlineClient_SpawnActor(actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
+
+}
+
+Actor* Actor_SpawnAsChildDirect(ActorContext* actorCtx, Actor* parent, PlayState* play, s16 actorId, f32 posX, f32 posY,
+                                f32 posZ, s16 rotX, s16 rotY, s16 rotZ, f32 homeposX, f32 homeposY, f32 homeposZ,
+                                s16 homerotX, s16 homerotY, s16 homerotZ, s16 params, int delayInit) {
+    Actor* spawnedActor = Actor_SpawnDirect(actorCtx, play, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX, posY,
+                                            posZ, rotX, rotY, rotZ, params, delayInit);
 
     if (spawnedActor == NULL) {
         return NULL;
@@ -3440,6 +3467,11 @@ Actor* Actor_SpawnAsChild(ActorContext* actorCtx, Actor* parent, PlayState* play
     }
 
     return spawnedActor;
+}
+
+Actor* Actor_SpawnAsChild(ActorContext* actorCtx, Actor* parent, PlayState* play, s16 actorId, f32 posX, f32 posY,
+                          f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params) {
+    return ZeldaOnlineClient_SpawnActorAsChild(parent, actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
 }
 
 void Actor_SpawnTransitionActors(PlayState* play, ActorContext* actorCtx) {

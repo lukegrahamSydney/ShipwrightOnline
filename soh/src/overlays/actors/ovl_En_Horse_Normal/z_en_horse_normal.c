@@ -203,26 +203,26 @@ void EnHorseNormal_Init(Actor* thisx, PlayState* play) {
     Collider_SetCylinder(play, &this->cloneCollider, &this->actor, &sCylinderInit2);
     CollisionCheck_SetInfo(&this->actor.colChkInfo, NULL, &sColChkInfoInit);
     if (play->sceneNum == SCENE_LON_LON_RANCH) {
-        if (this->actor.world.rot.z == 0 || !IS_DAY) {
+        if (this->actor.home.rot.z == 0 || !IS_DAY) {
             Actor_Kill(&this->actor);
             return;
         }
         if (!LINK_IS_ADULT) {
             if (Flags_GetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE)) {
-                if (this->actor.world.rot.z != 3) {
+                if (this->actor.home.rot.z != 3) {
                     Actor_Kill(&this->actor);
                     return;
                 }
-            } else if (this->actor.world.rot.z != 1) {
+            } else if (this->actor.home.rot.z != 1) {
                 Actor_Kill(&this->actor);
                 return;
             }
         } else if (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) || (DREG(1) != 0)) {
-            if (this->actor.world.rot.z != 7) {
+            if (this->actor.home.rot.z != 7) {
                 Actor_Kill(&this->actor);
                 return;
             }
-        } else if (this->actor.world.rot.z != 5) {
+        } else if (this->actor.home.rot.z != 5) {
             Actor_Kill(&this->actor);
             return;
         }

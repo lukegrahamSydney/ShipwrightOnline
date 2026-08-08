@@ -121,6 +121,8 @@ static AnimationMinimalInfo sAnimationInfo[] = {
     { &gBusinessScrubNervousTransitionAnim, ANIMMODE_ONCE, 0.0f },
 };
 
+AnimationInfo* gEnDnsAnimationInfo = sAnimationInfo;
+
 void EnDns_Init(Actor* thisx, PlayState* play) {
     EnDns* this = (EnDns*)thisx;
 

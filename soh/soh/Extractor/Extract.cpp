@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <winuser.h>
 #include <shlwapi.h>
+#include <commdlg.h>
 #pragma comment(lib, "Shlwapi.lib")
 #endif
 #include "Extract.h"

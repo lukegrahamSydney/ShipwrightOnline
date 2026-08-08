@@ -51,6 +51,7 @@ void Network::SendDataToRemote(const char* payload) {
     SDLNet_TCP_Send(networkSocket, payload, static_cast<int>(strlen(payload) + 1));
 }
 
+
 void Network::SendJsonToRemote(nlohmann::json payload) {
     SendDataToRemote(payload.dump().c_str());
 }
@@ -81,7 +82,7 @@ void Network::ReceiveFromServer() {
         // Listen to socket messages
         while (isConnected && networkSocket && isEnabled) {
             // we check first if socket has data, to not block in the TCP_Recv
-            int socketsReady = SDLNet_CheckSockets(socketSet, 0);
+            int socketsReady = SDLNet_CheckSockets(socketSet, 1);
 
             if (socketsReady == -1) {
                 SPDLOG_ERROR("[Network] SDLNet_CheckSockets: {}", SDLNet_GetError());

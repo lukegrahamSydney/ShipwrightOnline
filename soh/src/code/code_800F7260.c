@@ -3,6 +3,7 @@
 #include "vt.h"
 
 #include "soh/Enhancements/audio/AudioEditor.h"
+#include "soh/Network/ZeldaOnline/AbstractActorSoundHelper.h"
 
 typedef struct {
     /* 0x00 */ u16 sfxId;
@@ -128,6 +129,10 @@ void Audio_PlaySoundGeneral(u16 sfxId, Vec3f* pos, u8 token, f32* freqScale, f32
     size_t i;
     SoundRequest* req;
 
+    if (ZeldaOnline_ShouldSuppressActorSound(sfxId)) {
+        return;
+    }
+
     if (!gSoundBankMuted[SFX_BANK_SHIFT(sfxId)]) {
         req = &sSoundRequests[sSoundRequestWriteIndex];
         if (!gAudioSfxSwapOff) {
@@ -156,6 +161,12 @@ void Audio_PlaySoundGeneral(u16 sfxId, Vec3f* pos, u8 token, f32* freqScale, f32
         req->vol = vol;
         req->reverbAdd = reverbAdd;
         sSoundRequestWriteIndex++;
+
+        if (ZeldaOnline_ShouldTransmitActorSound(sfxId)) {
+            if (pos != NULL) {
+                ZeldaOnline_OnActorSound(sfxId, pos->x, pos->y, pos->z);
+            }
+        }
     }
 }
 

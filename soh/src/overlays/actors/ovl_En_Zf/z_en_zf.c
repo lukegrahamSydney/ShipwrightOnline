@@ -101,6 +101,8 @@ static Vec3f sPlatformPositions[] = {
 // These seem to relate to the tagging in/out the minibosses do
 s16 D_80B4A1B0 = 0;
 s16 D_80B4A1B4 = 1;
+s16* gEnZfInactiveParams = &D_80B4A1B4; // params of the INACTIVE (invincible) miniboss, -1 = none
+s16* gEnZfSwapRequest = &D_80B4A1B0;    // nonzero = active one should tag out
 
 const ActorInit En_Zf_InitVars = {
     ACTOR_EN_ZF,

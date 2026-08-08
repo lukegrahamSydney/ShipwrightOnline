@@ -131,6 +131,8 @@ static AnimationInfo sAnimationInfo[] = {
     { &object_st_Anim_005B98, 2.0f, 0.0f, -1.0f, ANIMMODE_LOOP_INTERP, -8.0f },
 };
 
+AnimationInfo* gEnStAnimationInfo = sAnimationInfo;
+
 void EnSt_SetupAction(EnSt* this, EnStActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }

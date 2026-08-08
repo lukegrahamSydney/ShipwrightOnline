@@ -64,7 +64,7 @@ static ColliderCylinderInit sCylinderInit = {
 
 static CollisionCheckInfoInit sColChkInfoInit = { 1, 18, 32, MASS_HEAVY };
 
-static s16 sPuzzleCounter = 0;
+s16 sPuzzleCounter = 0;
 
 static InitChainEntry sInitChain[] = {
     ICHAIN_F32(gravity, -1, ICHAIN_CONTINUE),

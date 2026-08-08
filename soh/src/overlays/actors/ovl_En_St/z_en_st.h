@@ -6,7 +6,7 @@
 
 struct EnSt;
 
-typedef void (*EnStActionFunc)(struct EnSt* this, PlayState* play);
+typedef void (*EnStActionFunc)(struct EnSt*, PlayState* play);
 
 typedef struct EnSt {
     /* 0x0000 */ Actor actor;

@@ -1854,6 +1854,7 @@ void func_80AEF188(EnRu1* this, PlayState* play) {
 }
 
 void func_80AEF1F0(EnRu1* this, PlayState* play, UNK_TYPE arg2) {
+
     if (arg2 != 0) {
         Animation_Change(&this->skelAnime, &gRutoChildSittingAnim, 1.0f, 0.0f,
                          Animation_GetLastFrame(&gRutoChildSittingAnim), ANIMMODE_LOOP, 0.0f);

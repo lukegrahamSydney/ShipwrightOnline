@@ -953,6 +953,8 @@ typedef struct Player {
     /*        */ u8 boomerangQuickRecall; // Has the player pressed the boomerang button while it's in the air still?
     /*        */ u8 ivanDamageMultiplier;
     // #endregion
+
+    char skinPrefix[20];
 } Player; // size = 0xA94
 
 #endif

@@ -400,3 +400,9 @@ void GameInteractor_ExecuteOnRandoEntranceDiscovered(u16 entranceIndex, u8 isRev
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandoEntranceDiscovered>(entranceIndex,
                                                                                       isReversedEntrance);
 }
+
+// ZO
+void GameInteractor_ExecuteOnTransitionRoom() {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnTransitionRoom>();
+}
+
