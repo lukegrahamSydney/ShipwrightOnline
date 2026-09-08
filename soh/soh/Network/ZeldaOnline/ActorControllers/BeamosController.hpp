@@ -204,14 +204,14 @@ class BeamosController : public AbstractActorController {
             vm->skelAnime.curFrame = vm->skelAnime.startFrame;
 
         if (HitWouldReact(play)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
         ClearHitFlags();
 
         if (m_currentActionIndex == ID_WAIT && vm->actor.xzDistToPlayer < vm->beamSightRange && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (vm->unk_260 == 4) {
             EffectSsDeadDs_SpawnStationary(play, &vm->beamPos3, 20, -1, 255, 20);

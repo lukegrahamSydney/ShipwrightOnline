@@ -49,14 +49,16 @@ class ZNetworking {
     virtual void OnDisconnected() {
     }
 
+
     virtual void OnConnectionClosedBeforeConnect() {
     }
     virtual void ProcessOutgoingPackets() {
     }
 
+    void FlushSendBuffer();
   private:
     void Close(const std::string& reason);
-    void FlushSendBuffer();
+
     bool CompleteConnect();
 
     SoxHandle m_socket = INVALID_SOCKET;
@@ -64,7 +66,7 @@ class ZNetworking {
 
     ByteStream m_sendBuffer;
     time_t m_connectStartedAt = 0;
-    int m_connectTimeout = 10;
+    int m_connectTimeout = 5;
 
     static const int RECV_CHUNK = 8192;
 };

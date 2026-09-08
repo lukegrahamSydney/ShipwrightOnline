@@ -15,13 +15,7 @@
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
-typedef enum {
-    /* 0 */ DOOR_KILLER_DOOR,
-    /* 1 */ DOOR_KILLER_RUBBLE_PIECE_1,
-    /* 2 */ DOOR_KILLER_RUBBLE_PIECE_2,
-    /* 3 */ DOOR_KILLER_RUBBLE_PIECE_3,
-    /* 4 */ DOOR_KILLER_RUBBLE_PIECE_4
-} DoorKillerBehaviour;
+
 
 void DoorKiller_Init(Actor* thisx, PlayState* play);
 void DoorKiller_Destroy(Actor* thisx, PlayState* play);

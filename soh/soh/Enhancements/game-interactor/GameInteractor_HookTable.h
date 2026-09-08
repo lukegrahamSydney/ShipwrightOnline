@@ -51,9 +51,11 @@ DEFINE_HOOK(OnPlayerHoldUpShield, ());
 DEFINE_HOOK(OnPlayerFirstPersonControl, (Player * player));
 DEFINE_HOOK(OnPlayerProcessStick, ());
 DEFINE_HOOK(OnPlayerShieldControl, (float* sp50, float* sp54));
+DEFINE_HOOK(OnPlayPostInit, (int sceneNum));
 DEFINE_HOOK(OnPlayDestroy, ());
 DEFINE_HOOK(OnPlayDrawBegin, ());
 DEFINE_HOOK(OnPlayDrawEnd, ());
+DEFINE_HOOK(OnDrawOverlay, (GraphicsContext * gfxCtx));
 DEFINE_HOOK(OnVanillaBehavior, (GIVanillaBehavior flag, bool* result, va_list originalArgs));
 DEFINE_HOOK(OnSaveFile, (int32_t fileNum, int32_t sectionID));
 DEFINE_HOOK(OnLoadFile, (int32_t fileNum));
@@ -99,3 +101,6 @@ DEFINE_HOOK(OnRandoEntranceDiscovered, (u16 entranceIndex, u8 isReversedEntrance
 
 // ZO
 DEFINE_HOOK(OnTransitionRoom, ());
+DEFINE_HOOK(ShouldLoadSetupActors, (bool* result));
+DEFINE_HOOK(OnSceneLoad, (int16_t sceneNum));
+DEFINE_HOOK(ShouldActorDelayInit, (void* actor, bool* result));

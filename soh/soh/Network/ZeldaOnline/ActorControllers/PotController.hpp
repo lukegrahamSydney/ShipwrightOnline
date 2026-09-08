@@ -129,13 +129,13 @@ class PotController : public AbstractActorController {
         EnsureDrawInstalled(play);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
-        if (pot->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+        if (pot->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

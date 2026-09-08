@@ -25,7 +25,6 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include "soh/Network/ZeldaOnline/ZeldaOnlineRoomWindow.hpp"
 
-
 namespace SohGui {
 
 // MARK: - Properties
@@ -90,7 +89,7 @@ std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
 std::shared_ptr<TimeDisplayWindow> mTimeDisplayWindow;
 std::shared_ptr<AnchorRoomWindow> mAnchorRoomWindow;
-//std::shared_ptr<ZeldaOnline::ZeldaOnlineRoomWindow> mZeldaOnlineRoomWindow;
+std::shared_ptr<ZeldaOnline::ZeldaOnlineRoomWindow> mZeldaOnlineRoomWindow;
 
 UIWidgets::Colors GetMenuThemeColor() {
     return mSohMenu->GetMenuThemeColor();
@@ -199,9 +198,10 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mAnchorRoomWindow);
 
 
-    //mZeldaOnlineRoomWindow = std::make_shared<ZeldaOnline::ZeldaOnlineRoomWindow>(CVAR_WINDOW("ZeldaOnline"), "ZeldaOnline");
-    //gui->AddGuiWindow(mZeldaOnlineRoomWindow);
-    //mZeldaOnlineRoomWindow->Show();
+    mZeldaOnlineRoomWindow = std::make_shared<ZeldaOnline::ZeldaOnlineRoomWindow>("gZeldaOnline.Enabled", false, "ZeldaOnline");
+    ZeldaOnline::ZeldaOnlineRoomWindow::Instance = mZeldaOnlineRoomWindow.get();
+    gui->AddGuiWindow(mZeldaOnlineRoomWindow);
+
 }
 
 void Destroy() {

@@ -62,6 +62,8 @@ static ColliderTrisInit sTrisInit = {
     sTrisElementsInit,
 };
 
+ColliderTrisInit* gBgHidanHamstepTrisInit = &sTrisInit;
+
 const ActorInit Bg_Hidan_Hamstep_InitVars = {
     ACTOR_BG_HIDAN_HAMSTEP,
     ACTORCAT_BG,

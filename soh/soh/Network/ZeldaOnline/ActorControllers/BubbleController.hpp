@@ -149,14 +149,14 @@ class BubbleController : public AbstractActorController {
         EnBubble* bb = Typed();
 
         if ((bb->colliderSphere.base.acFlags & AC_HIT) || (bb->colliderSphere.base.ocFlags2 & OC2_HIT_PLAYER)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
         if (bb->actionFunc != EnBubble_Pop && bb->actor.colChkInfo.health > 0 && bb->actor.xzDistToPlayer < 300.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         bb->actor.shape.yOffset = (bb->expansionHeight + 1.0f) * 16.0f;
         Actor_SetFocus(&bb->actor, bb->actor.shape.yOffset);

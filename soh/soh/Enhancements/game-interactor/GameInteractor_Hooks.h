@@ -33,6 +33,7 @@ void GameInteractor_ExecuteOnPlayerSfx(u16 sfxId);
 void GameInteractor_ExecuteOnOcarinaSongAction();
 void GameInteractor_ExecuteOnOcarinaNote(uint8_t note, float modulator, int8_t bend);
 void GameInteractor_ExecuteOnCuccoOrChickenHatch();
+
 bool GameInteractor_ShouldActorInit(void* actor);
 void GameInteractor_ExecuteOnActorInit(void* actor);
 void GameInteractor_ExecuteOnActorSpawn(void* actor);
@@ -53,9 +54,12 @@ void GameInteractor_ExecuteOnPlayerShieldControl(float* sp50, float* sp54);
 void GameInteractor_ExecuteOnPlayerProcessStick();
 void GameInteractor_ExecuteOnShopSlotChangeHooks(uint8_t cursorIndex, int16_t price);
 void GameInteractor_ExecuteOnDungeonKeyUsedHooks(uint16_t mapIndex);
+void GameInteractor_ExecuteOnPlayPostInit(int sceneNum);
 void GameInteractor_ExecuteOnPlayDestroy();
 void GameInteractor_ExecuteOnPlayDrawBegin();
 void GameInteractor_ExecuteOnPlayDrawEnd();
+void GameInteractor_ExecuteOnDrawOverlay(GraphicsContext* gfxCtx);
+
 bool GameInteractor_Should(GIVanillaBehavior flag, uint32_t result, ...);
 
 // MARK: -  Save Files
@@ -107,6 +111,10 @@ void GameInteractor_ExecuteOnRandoEntranceDiscovered(u16 entranceIndex, u8 isRev
 
 //ZO
 void GameInteractor_ExecuteOnTransitionRoom();
+bool GameInteractor_ShouldLoadSetupActors();
+void GameInteractor_ExecuteOnSceneLoad(int16_t sceneNum);
+bool GameInteractor_ShouldActorDelayInit(void* actor);
+
 #ifdef __cplusplus
 }
 #endif

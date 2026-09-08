@@ -156,7 +156,7 @@ class GoroiwaController : public AbstractActorController {
         EnGoroiwa* g = Typed();
 
         if (g->actor.xzDistToPlayer < REGISTER_RADIUS && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         {
             Vec3f rayOrigin = g->actor.world.pos;

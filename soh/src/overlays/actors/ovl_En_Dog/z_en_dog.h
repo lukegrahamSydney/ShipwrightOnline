@@ -24,6 +24,7 @@ typedef struct EnDog {
     /* 0x01F2 */ s16 behavior;
     /* 0x01F4 */ Vec3s jointTable[13];
     /* 0x0242 */ Vec3s morphTable[13];
+    u8 dogFollowEverywhere;
 } EnDog; // size = 0x0290
 
 #endif

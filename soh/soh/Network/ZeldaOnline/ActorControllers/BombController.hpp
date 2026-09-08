@@ -128,7 +128,7 @@ class BombController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (m_currentActionIndex == ID_EXPLODE && !IsRunningLocally())
+        if (m_currentActionIndex == ID_EXPLODE)
             GoLocal();
         if (Typed()->actor.draw == nullptr) {
             Typed()->actor.draw = EnBom_Draw;
@@ -141,15 +141,15 @@ class BombController : public AbstractActorController {
     void UpdatePuppet(PlayState* play) override {
         EnBom* bom = Typed();
 
-        if (bom->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+        if (bom->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
@@ -164,7 +164,7 @@ class BombController : public AbstractActorController {
 
         EnBomActionFunc saved = bom->actionFunc;
         bom->actionFunc = DummyAction;
-        m_originalUpdate(m_actor, play);
+        UpdateLeader(play);
         if (bom->actionFunc == DummyAction) {
             bom->actionFunc = saved;
         }

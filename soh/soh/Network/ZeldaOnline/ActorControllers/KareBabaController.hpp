@@ -52,6 +52,10 @@ class KareBabaController : public AbstractActorController {
         return sTable;
     }
 
+   void OnActorInit() override {
+        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
+    }
+
     u8 CurrentActionIndex() const {
         size_t n;
         const void* const* t = ActionTable(&n);
@@ -173,13 +177,13 @@ class KareBabaController : public AbstractActorController {
         UpdateAnimation(&kb->skelAnime, LOCK_CUR_FRAME);
 
         if (kb->bodyCollider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         if (kb->actor.xzDistToPlayer < 240.0f && IsLocalPlayerClosest()) {
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
         }
 
         if (kb->actionFunc != EnKarebaba_Dying && kb->actionFunc != EnKarebaba_DeadItemDrop) {

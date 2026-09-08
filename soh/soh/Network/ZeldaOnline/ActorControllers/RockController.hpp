@@ -29,7 +29,6 @@ class RockController : public AbstractActorController {
 
   protected:
     static constexpr u8 ID_UNKNOWN = 0xFF;
-    static constexpr u8 ID_WAIT = 0;
 
     static constexpr u32 BREAK_DMG_FLAGS = 0x40000048;
 
@@ -87,7 +86,6 @@ class RockController : public AbstractActorController {
         switch (index) {
             case PROP_ACTION: {
                 u8 id = (u8)(data.Read<PackedUInt1>().value());
-                m_currentActionIndex = id;
                 size_t count;
                 const IshiActionFunc* table = ActionTable(&count);
                 if (id < count)
@@ -126,13 +124,13 @@ class RockController : public AbstractActorController {
         EnIshi* ishi = Typed();
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
-        if (ishi->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+        if (ishi->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -142,14 +140,11 @@ class RockController : public AbstractActorController {
         if (ishi->actor.parent != nullptr)
             ishi->actor.room = -1;
 
-        if (m_currentActionIndex == ID_WAIT && ishi->actor.parent == nullptr && ishi->actor.xzDistToPlayer < 600.0f) {
+        if (ishi->actionFunc == EnIshi_Wait && ishi->actor.parent == nullptr) {
 
             Collider_UpdateCylinder(&ishi->actor, &ishi->collider);
 
-            u8 roles = COLL_AC;
-            if (ishi->actor.xzDistToPlayer < 400.0f)
-                roles |= COLL_OC;
-            RegisterColliderBase(play, &ishi->collider.base, roles);
+            RegisterColliderBase(play, &ishi->collider.base, COLL_AC | COLL_OC);
 
             if (ishi->actor.xzDistToPlayer < 90.0f) {
                 if (IsLargeRock())
@@ -159,11 +154,8 @@ class RockController : public AbstractActorController {
             }
         }
     }
-
-  private:
-    u8 m_currentActionIndex = ID_UNKNOWN;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

@@ -106,12 +106,12 @@ class MarketNpcController : public AbstractActorController {
         EnHy* npc = Typed();
 
         if (npc->actionFunc == EnHy_InitImpl) {
-            m_originalUpdate(m_actor, play);
+            UpdateLeader(play);
             return;
         }
 
         if (npc->actor.xzDistToPlayer < 150.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[npc->objBankIndexOsAnime].segment);
         SkelAnime_Update(&npc->skelAnime);
@@ -119,6 +119,8 @@ class MarketNpcController : public AbstractActorController {
 
         EnHy_UpdateNPC(npc, play);
         EnHy_UpdateCollider(npc, play);
+
+        m_conversationHandled = true;
     }
 };
 

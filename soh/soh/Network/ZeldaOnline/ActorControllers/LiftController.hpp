@@ -108,7 +108,7 @@ class LiftController : public AbstractActorController {
         ObjLift* lift = Typed();
 
         if (m_currentActionIndex == ID_WAIT && DynaPolyActor_IsPlayerOnTop(&lift->dyna))
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
     }
 

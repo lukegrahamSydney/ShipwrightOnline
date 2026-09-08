@@ -252,14 +252,14 @@ class SkulltulaController : public AbstractActorController {
         UpdateAnimation(&st->skelAnime, LOCK_CUR_FRAME);
 
         if (AnyAcHit()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         if (st->actionFunc == (EnStActionFunc)EnSt_WaitOnCeiling && st->actor.xzDistToPlayer < 150.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         //Setting the various hit box and collision boxes for this frame
         //OC is for collisions. Without setting it, you will walk right through the Actor

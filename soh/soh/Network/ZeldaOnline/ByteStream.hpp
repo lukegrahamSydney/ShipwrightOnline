@@ -68,19 +68,19 @@ class ByteStream {
         long target = 0;
         switch (origin) {
             case ORIGIN_CUR:
-                target = static_cast<long>(readPos) + pos;
+                target = (long)(readPos) + pos;
                 break;
             case ORIGIN_SET:
                 target = pos;
                 break;
             case ORIGIN_END:
-                target = static_cast<long>(count) - pos;
+                target = (long)(count)-pos;
                 break;
         }
         if (target < 0)
             target = 0;
-        if (target > static_cast<long>(count))
-            target = static_cast<long>(count);
+        if (target > (long)(count))
+            target = (long)(count);
         readPos = (unsigned int)(target);
     }
     int compare(const ByteStream& stream) const {
@@ -97,7 +97,9 @@ class ByteStream {
     }
 
     int CompareRange(unsigned int thisPos, const ByteStream& other, unsigned int otherPos, unsigned int length) const {
-        if (thisPos + length > Length() || otherPos + length > other.Length())
+        if (thisPos > Length() || length > Length() - thisPos)
+            return 1;
+        if (otherPos > other.Length() || length > other.Length() - otherPos)
             return 1;
         return memcmp(Text() + thisPos, other.Text() + otherPos, length);
     }
@@ -188,7 +190,6 @@ template <class T> ByteStream& ByteStream::operator>>(T& data) {
 }
 
 template <class T> T ByteStream::Read() {
-
     T retVal{};
     if (BytesLeft() >= sizeof(T)) {
         memcpy(&retVal, &buffer[readPos], sizeof(T));

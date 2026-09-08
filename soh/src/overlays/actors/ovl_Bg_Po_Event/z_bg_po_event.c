@@ -82,6 +82,8 @@ static ColliderTrisInit sTrisInit = {
     sTrisElementsInit,
 };
 
+ColliderTrisInit* gBgPoEventTrisInit = &sTrisInit;
+
 u8 sBgPoEventBlocksAtRest = 0;
 
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };

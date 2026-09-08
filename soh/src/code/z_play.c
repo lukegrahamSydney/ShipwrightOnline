@@ -683,6 +683,8 @@ void Play_Init(GameState* thisx) {
 
     // nextEntranceIndex was not initialized, so the previous value was carried over during soft resets.
     gPlayState->nextEntranceIndex = gSaveContext.entranceIndex;
+
+    GameInteractor_ExecuteOnPlayPostInit(gPlayState->sceneNum);
 }
 
 void Play_Update(PlayState* play) {
@@ -1339,6 +1341,8 @@ void Play_DrawOverlayElements(PlayState* play) {
     if (play->gameOverCtx.state != GAMEOVER_INACTIVE) {
         GameOver_FadeInLights(play);
     }
+
+    GameInteractor_ExecuteOnDrawOverlay(play->state.gfxCtx);
 }
 
 void Play_Draw(PlayState* play) {

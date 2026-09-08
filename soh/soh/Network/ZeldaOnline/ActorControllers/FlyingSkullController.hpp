@@ -24,23 +24,19 @@ void EnBb_SetupDeath(EnBb* bb, PlayState* play);
 namespace ZeldaOnline {
 
 typedef enum {
-     BB_DAMAGE,
-     BB_KILL,
-     BB_FLAME_TRAIL,
-     BB_DOWN,
-     BB_STUNNED,
-     BB_UNUSED,
-     BB_BLUE,
-     BB_RED,
-     BB_WHITE,
-     BB_GREEN
+    BB_DAMAGE,
+    BB_KILL,
+    BB_FLAME_TRAIL,
+    BB_DOWN,
+    BB_STUNNED,
+    BB_UNUSED,
+    BB_BLUE,
+    BB_RED,
+    BB_WHITE,
+    BB_GREEN
 } EnBbAction;
 
-typedef enum {
-     BBMOVE_NORMAL,
-     BBMOVE_NOCLIP,
-     BBMOVE_HIDDEN
-} EnBbMoveMode;
+typedef enum { BBMOVE_NORMAL, BBMOVE_NOCLIP, BBMOVE_HIDDEN } EnBbMoveMode;
 
 class FlyingSkullController : public AbstractActorController {
   public:
@@ -67,15 +63,8 @@ class FlyingSkullController : public AbstractActorController {
     using BbActionFunc = void (*)(EnBb*, PlayState*);
     static const BbActionFunc* ActionTable(size_t* count) {
         static const BbActionFunc sTable[] = {
-            EnBb_FlameTrail,
-            EnBb_Death,
-            EnBb_Damage,
-            EnBb_Blue,
-            EnBb_Down,
-            EnBb_Red,
-            EnBb_White,
-            EnBb_Green,
-            EnBb_Stunned,
+            EnBb_FlameTrail, EnBb_Death, EnBb_Damage, EnBb_Blue,    EnBb_Down,
+            EnBb_Red,        EnBb_White, EnBb_Green,  EnBb_Stunned,
         };
         *count = sizeof(sTable) / sizeof(sTable[0]);
         return sTable;
@@ -151,7 +140,6 @@ class FlyingSkullController : public AbstractActorController {
         PROP_REACTION,
         PROP_PATH,
         PROP_HOME_POS,
-        PROP_BODY_BREAK,
         PROP_COLL_ROLES,
         PROP_ANIM,
     };
@@ -187,7 +175,6 @@ class FlyingSkullController : public AbstractActorController {
                      ByteStream() << PackedFloat4(bb->actor.home.pos.x) << PackedFloat4(bb->actor.home.pos.y)
                                   << PackedFloat4(bb->actor.home.pos.z),
                      out);
-        PackProperty(PROP_BODY_BREAK, PackedInt2(bb->bodyBreak.val), out);
         BuildStandardExtendedProperty(PROP_COLOR_FILTER, out);
         PackProperty(PROP_COLL_ROLES, PackedUInt1(CurrentColliderRoles()), out);
         PackProperty(PROP_ANIM, BuildAnimProperty(CurrentAnimIndex(), &bb->skelAnime), out);
@@ -260,10 +247,6 @@ class FlyingSkullController : public AbstractActorController {
                 bb->actor.home.pos.y = data.Read<PackedFloat4>().value();
                 bb->actor.home.pos.z = data.Read<PackedFloat4>().value();
                 break;
-            case PROP_BODY_BREAK:
-                bb->bodyBreak.val = (s16)(data.Read<PackedInt2>().value());
-                break;
-
             case PROP_COLL_ROLES:
                 m_roles = (u8)(data.Read<PackedUInt1>().value());
                 break;
@@ -279,13 +262,25 @@ class FlyingSkullController : public AbstractActorController {
         return true;
     }
 
+    void OnServerDestroy() override {
+        if (gPlayState == nullptr || m_actor == nullptr) {
+            return;
+        }
+        if (m_currentActionIndex == ID_DEATH) {
+            return;
+        }
+
+        EnBb_SetupDeath(Typed(), gPlayState);
+        GoLocal();
+    }
+
     void UpdatePuppet(PlayState* play) override {
         EnBb* bb = Typed();
 
         UpdateAnimation(&bb->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -293,7 +288,7 @@ class FlyingSkullController : public AbstractActorController {
         bb->collider.base.atFlags &= ~AT_HIT;
 
         if (m_currentActionIndex != ID_DEATH && bb->actor.xzDistToPlayer < 400.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         bb->actor.focus.pos = bb->actor.world.pos;
 
@@ -311,6 +306,6 @@ class FlyingSkullController : public AbstractActorController {
     u8 m_roles = COLL_AC | COLL_OC;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

@@ -1786,7 +1786,7 @@ void Select_Draw(SelectContext* this) {
     } else {
         Select_DrawMenu(this);
     }
-
+    GameInteractor_ExecuteOnDrawOverlay(this->state.gfxCtx);
     CLOSE_DISPS(gfxCtx);
 }
 
@@ -1803,6 +1803,7 @@ void Select_Main(GameState* thisx) {
         Select_UpdateMenu(this);
     }
     Select_Draw(this);
+
 }
 
 void Select_Destroy(GameState* thisx) {

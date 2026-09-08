@@ -1,13 +1,16 @@
 #ifndef BOSSGOMACONTROLLERH
 #define BOSSGOMACONTROLLERH
 
-#include "../AbstractActorController.hpp"
-
+#include "../AbstractBossController.hpp"
 extern "C" {
 #include "src/overlays/actors/ovl_Boss_Goma/z_boss_goma.h"
 #include "objects/object_goma/object_goma.h"
-
+#include "assets/textures/boss_title_cards/object_goma.h"
+        
 void BossGoma_SetupDefeated(BossGoma* boss, PlayState* play);
+
+u16 func_800FA0B4(u8 seqPlayerIndex);
+void func_80064534(PlayState* play, CutsceneContext* csCtx);
 
 void BossGoma_UpdateTailLimbsScale(BossGoma* boss);
 
@@ -33,9 +36,9 @@ void BossGoma_Defeated(BossGoma* boss, PlayState* play);
 
 namespace ZeldaOnline {
 
-class BossGomaController : public AbstractActorController {
+class BossGomaController : public AbstractBossController {
   public:
-    using AbstractActorController::AbstractActorController;
+    using AbstractBossController::AbstractBossController;
 
     BossGoma* Typed() const {
         return reinterpret_cast<BossGoma*>(m_actor);
@@ -45,35 +48,55 @@ class BossGomaController : public AbstractActorController {
 
   protected:
     static constexpr u8 ID_UNKNOWN = 0xFF;
-    static constexpr u8 SETUP_ID_FLOOR_IDLE = 11;
-    static constexpr u8 SETUP_ID_FLOOR_ATTACK = 16;
-    static constexpr u8 SETUP_ID_DEFEATED = 18;
+    static constexpr u8 SETUP_ID_FLOOR_IDLE = 10;
+    static constexpr u8 SETUP_ID_FLOOR_ATTACK = 15;
+    static constexpr u8 SETUP_ID_DEFEATED = 17;
 
     static const BossGomaActionFunc* ActionTable(size_t* count) {
         static const BossGomaActionFunc sTable[] = {
-             BossGoma_Encounter,
-             nullptr,
-             BossGoma_CeilingIdle,
-             BossGoma_CeilingMoveToCenter,
-             BossGoma_CeilingPrepareSpawnGohmas,
-             BossGoma_CeilingSpawnGohmas,
-             BossGoma_WallClimb,
-             BossGoma_FallJump,
-             BossGoma_FallStruckDown,
-             BossGoma_FloorLand,
-             BossGoma_FloorLandStruckDown,
-             BossGoma_FloorIdle,
-             BossGoma_FloorMain,
-             BossGoma_FloorStunned,
-             BossGoma_FloorAttackPosture,
-             BossGoma_FloorPrepareAttack,
-             BossGoma_FloorAttack,
-             BossGoma_FloorDamaged,
-             BossGoma_Defeated,
+            BossGoma_Encounter,
+            BossGoma_CeilingIdle,
+            BossGoma_CeilingMoveToCenter,
+            BossGoma_CeilingPrepareSpawnGohmas,
+            BossGoma_CeilingSpawnGohmas,
+            BossGoma_WallClimb,
+            BossGoma_FallJump,
+            BossGoma_FallStruckDown,
+            BossGoma_FloorLand,
+            BossGoma_FloorLandStruckDown,
+            BossGoma_FloorIdle,
+            BossGoma_FloorMain,
+            BossGoma_FloorStunned,
+            BossGoma_FloorAttackPosture,
+            BossGoma_FloorPrepareAttack,
+            BossGoma_FloorAttack,
+            BossGoma_FloorDamaged,
+            BossGoma_Defeated,
         };
 
         *count = sizeof(sTable) / sizeof(sTable[0]);
         return sTable;
+    }
+
+    const char* GetTitleCard() const override {
+        return gGohmaTitleCardENGTex;
+    }
+
+    int16_t* GetCameraSubID() override {
+        return &Typed()->subCameraId;
+    }
+
+    Vec3f_* GetCameraAt() override {
+        return &Typed()->subCameraAt;
+    }
+
+    Vec3f_* GetCameraEye() override {
+        return &Typed()->subCameraEye;
+    }
+
+    void OnActorInit() override {
+        if (!IsLeader())
+            EndCutsceneCamera();
     }
 
     u8 CurrentSetupIndex() const {
@@ -83,6 +106,10 @@ class BossGomaController : public AbstractActorController {
             if (table[i] != nullptr && table[i] == Typed()->actionFunc)
                 return (u8)(i);
         return ID_UNKNOWN;
+    }
+
+    bool CanSpawnActorOverNetwork(s16 actorId, s16 params) override {
+        return actorId != ACTOR_ITEM_B_HEART && actorId != ACTOR_DOOR_WARP1 && actorId != ACTOR_DOOR_SHUTTER;
     }
 
     static const char* AnimForIndex(u8 idx) {
@@ -148,14 +175,17 @@ class BossGomaController : public AbstractActorController {
 
         if (boss->skelanime.playSpeed <= 0.0f)
             boss->skelanime.playSpeed = 1.0f;
+    }
 
-        if (gPlayState != nullptr && boss->subCameraId == MAIN_CAM && boss->disableGameplayLogic) {
-            boss->subCameraId = Play_CreateSubCamera(gPlayState);
-        }
+
+    static constexpr s16 ENCOUNTER_STATE_AWAIT_LOOK = 3;
+
+    bool CurrentSetupIsEncounter() const {
+        return Typed()->actionFunc == BossGoma_Encounter;
     }
 
     enum {
-        PROP_ACTION = PROP_CUSTOM_START,
+        PROP_ACTION = PROP_BOSS_END,
         PROP_ANIM_CUR_FRAME,
         PROP_ANIM,
         PROP_HEALTH,
@@ -180,7 +210,7 @@ class BossGomaController : public AbstractActorController {
         PROP_EYE_ENV_COLOR,
         PROP_COLLIDER_FLAGS,
         PROP_TAIL_SCALE_TIMERS,
-        PROP_JOINT_TABLE,
+        PROP_JOINT_TABLE
     };
 
     void BuildCustomProperties(ByteStream& out) override {
@@ -238,6 +268,12 @@ class BossGomaController : public AbstractActorController {
                 tail << PackedUInt1((u8)(boss->tailLimbsScaleTimers[i]));
             PackProperty(PROP_TAIL_SCALE_TIMERS, tail, out);
         }
+
+        BuildBossProperty(PROP_BOSS_CAMERA, out);
+        BuildBossProperty(PROP_BOSS_BGM, out);
+        BuildBossProperty(PROP_BOSS_TITLE_CARD, out);
+        BuildBossProperty(PROP_BOSS_LIGHTING, out);
+
         BuildStandardExtendedProperty(PROP_COLOR_FILTER, out);
         if (false) {
             ByteStream pose;
@@ -344,6 +380,7 @@ class BossGomaController : public AbstractActorController {
                 for (int i = 0; i < 4; i++)
                     boss->tailLimbsScaleTimers[i] = (s16)(data.Read<PackedUInt1>().value());
                 break;
+
             case PROP_JOINT_TABLE: {
                 unsigned int cap = sizeof(Vec3s) * boss->skelanime.limbCount;
                 unsigned int n = data.BytesLeft() < cap ? data.BytesLeft() : cap;
@@ -351,13 +388,14 @@ class BossGomaController : public AbstractActorController {
                 break;
             }
             default:
-                return false;
+                return ApplyBossProperty(index, data, propLen);
         }
         return true;
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (m_currentSetupIndex == SETUP_ID_DEFEATED) {
+        if (Typed()->actionFunc == BossGoma_Defeated) {
+            EndCutsceneCamera();
             BossGoma_SetupDefeated(Typed(), gPlayState);
             GoLocal();
         }
@@ -374,9 +412,11 @@ class BossGomaController : public AbstractActorController {
 
     void UpdateLeader(PlayState* play) override {
         AbstractActorController::UpdateLeader(play);
-        if (Typed()->actionFunc == BossGoma_Defeated && !IsRunningLocally()) {
-            GoLocal();
-        }
+
+        BossGoma* boss = Typed();
+
+        if (boss->actionFunc == BossGoma_Defeated && !Flags_GetClear(play, play->roomCtx.curRoom.num))
+            Flags_SetClear(play, play->roomCtx.curRoom.num);
     }
 
     void UpdatePuppet(PlayState* play) override {
@@ -385,9 +425,36 @@ class BossGomaController : public AbstractActorController {
         UpdateAnimation(&boss->skelanime, LOCK_CUR_FRAME);
 
         if (EyeHitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
-            return;
+            if (ClaimLeadership(CLAIM_REASON_COOLDOWN)) {
+                UpdateLeader(play);
+                return;
+            }
+        }
+
+
+        if (boss->actionFunc == BossGoma_Encounter && boss->actionState == 0 && IsLocalPlayerClosest())
+        {
+            if (ClaimLeadership(CLAIM_REASON_COOLDOWN))
+            {
+                UpdateLeader(play);
+                return;
+            }
+        }
+
+        if (boss->actionState == 3 && boss->actionFunc == BossGoma_Encounter) {
+            if (fabsf(boss->actor.projectedPos.x) < 150.0f && fabsf(boss->actor.projectedPos.y) < 250.0f &&
+                boss->actor.projectedPos.z < 800.0f && boss->actor.projectedPos.z > 0.0f) {
+                m_lookedAtFrames++;
+            } else {
+                m_lookedAtFrames = 0;
+            }
+
+            if (m_lookedAtFrames > 15) {
+                m_lookedAtFrames = 0;
+                ClaimLeadership(CLAIM_REASON_NOW);
+                UpdateLeader(play);
+                return;
+            }
         }
 
         boss->collider.base.acFlags &= ~AC_HIT;
@@ -396,7 +463,7 @@ class BossGomaController : public AbstractActorController {
 
         bool floorPhase = m_currentSetupIndex >= SETUP_ID_FLOOR_IDLE && m_currentSetupIndex <= SETUP_ID_FLOOR_ATTACK;
         if (floorPhase && boss->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         BossGoma_UpdateTailLimbsScale(boss);
 
@@ -408,9 +475,10 @@ class BossGomaController : public AbstractActorController {
     }
 
   private:
+    s16 m_lookedAtFrames = 0;
     u8 m_currentSetupIndex = ID_UNKNOWN;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

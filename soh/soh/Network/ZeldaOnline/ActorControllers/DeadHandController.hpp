@@ -236,7 +236,7 @@ class DeadHandController : public AbstractActorController {
         UpdateAnimation(&dh->skelAnime, LOCK_CUR_FRAME);
 
         if (AnyHit()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

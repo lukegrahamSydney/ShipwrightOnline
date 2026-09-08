@@ -20,8 +20,7 @@ class TrapController : public AbstractActorController {
   protected:
     static constexpr f32 DAMAGE_XZ_RANGE = 40.0f;
     static constexpr f32 DAMAGE_Y_RANGE = 20.0f;
-    static constexpr f32 CLAIM_XZ_RANGE = 70.0f;
-    static constexpr f32 CLAIM_Y_RANGE = 40.0f;
+    static constexpr s32 DAMAGE_COOLDOWN = 15;
 
     u8 CurrentColliderRoles() const {
         EnTrap* trap = Typed();
@@ -34,7 +33,6 @@ class TrapController : public AbstractActorController {
     enum {
         PROP_GENERIC1 = PROP_CUSTOM_START,
         PROP_GENERIC2,
-        PROP_DMG_TIMER,
         PROP_COLL_ROLES,
     };
 
@@ -43,7 +41,6 @@ class TrapController : public AbstractActorController {
 
         PackProperty(PROP_GENERIC1, PackedInt2(trap->genericVar1), out);
         PackProperty(PROP_GENERIC2, PackedFloat4(trap->genericVar2), out);
-        PackProperty(PROP_DMG_TIMER, PackedInt4(trap->playerDmgTimer), out);
         BuildStandardExtendedProperty(PROP_COLOR_FILTER, out);
         PackProperty(PROP_COLL_ROLES, PackedUInt1(CurrentColliderRoles()), out);
     }
@@ -58,10 +55,6 @@ class TrapController : public AbstractActorController {
             case PROP_GENERIC2:
                 trap->genericVar2 = data.Read<PackedFloat4>().value();
                 break;
-            case PROP_DMG_TIMER:
-                trap->playerDmgTimer = data.Read<PackedInt4>().value();
-                break;
-
             case PROP_COLL_ROLES:
                 m_roles = (u8)(data.Read<PackedUInt1>().value());
                 break;
@@ -75,25 +68,44 @@ class TrapController : public AbstractActorController {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
     }
 
+    void DamageLocalPlayer(PlayState* play) {
+        EnTrap* trap = Typed();
+        s16 angleToKnockPlayer;
+
+        if (trap->actor.colorFilterTimer != 0)
+            return;
+
+        DECR(trap->playerDmgTimer);
+
+        if ((trap->actor.xzDistToPlayer <= DAMAGE_XZ_RANGE) && (trap->playerDmgTimer == 0) &&
+            (trap->actor.yDistToPlayer <= DAMAGE_Y_RANGE)) {
+            if (!(trap->actor.params & (SPIKETRAP_MODE_LINEAR | SPIKETRAP_MODE_CIRCULAR))) {
+                if ((s16)(trap->genericVar1 - trap->actor.yawTowardsPlayer) >= 0)
+                    angleToKnockPlayer = trap->genericVar1 - 0x4000;
+                else
+                    angleToKnockPlayer = trap->genericVar1 + 0x4000;
+            } else {
+                angleToKnockPlayer = trap->actor.yawTowardsPlayer;
+            }
+
+            play->damagePlayer(play, -4);
+            func_8002F7A0(play, &trap->actor, 6.0f, angleToKnockPlayer, 6.0f);
+            trap->playerDmgTimer = DAMAGE_COOLDOWN;
+        }
+    }
+
     void UpdatePuppet(PlayState* play) override {
         EnTrap* trap = Typed();
 
-        if (trap->actor.xzDistToPlayer <= CLAIM_XZ_RANGE && trap->actor.yDistToPlayer <= CLAIM_Y_RANGE) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            UpdateLeader(play);
-            return;
-        }
-
         if (trap->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
         trap->collider.base.ocFlags1 &= ~OC1_HIT;
 
-        if (trap->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+        DamageLocalPlayer(play);
 
         if (trap->actor.colorFilterTimer != 0 && m_prevColorFilterTimer == 0) {
             Vec3f icePos = trap->actor.world.pos;
@@ -117,6 +129,6 @@ class TrapController : public AbstractActorController {
     u8 m_prevColorFilterTimer = 0;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

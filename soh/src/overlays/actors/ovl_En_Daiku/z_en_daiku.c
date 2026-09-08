@@ -127,6 +127,8 @@ static AnimationFrameCountInfo sAnimationInfo[] = {
     { &object_daiku_Anim_008164, 1.0f, 0, 0 },
 };
 
+AnimationFrameCountInfo* gEnDaikuAnimationInfo = &sAnimationInfo;
+
 static EnDaikuEscapeSubCamParam sEscapeSubCamParams[] = {
     { { 0, 130, 220 }, 100 },
     { { -20, 22, 280 }, 110 },

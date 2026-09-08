@@ -2,12 +2,12 @@
 #define BOSSDODONGOCONTROLLERH
 #include <cstring>
 
-#include "../AbstractActorController.hpp"
+#include "../AbstractBossController.hpp"
 
 extern "C" {
 #include "src/overlays/actors/ovl_Boss_Dodongo/z_boss_dodongo.h"
 #include "objects/object_kingdodongo/object_kingdodongo.h"
-
+#include "assets/textures/boss_title_cards/object_kingdodongo.h"
 void BossDodongo_IntroCutscene(BossDodongo* boss, PlayState* play);
 void BossDodongo_Walk(BossDodongo* boss, PlayState* play);
 void BossDodongo_Inhale(BossDodongo* boss, PlayState* play);
@@ -22,14 +22,17 @@ void BossDodongo_DeathCutscene(BossDodongo* boss, PlayState* play);
 
 void BossDodongo_SetupDeathCutscene(BossDodongo* boss);
 
+u16 func_800FA0B4(u8 seqPlayerIndex);
+void func_80064534(PlayState* play, CutsceneContext* csCtx);
+
 void BossDodongo_UpdateEffects(PlayState* play);
 }
 
 namespace ZeldaOnline {
 
-class BossDodongoController : public AbstractActorController {
+class BossDodongoController : public AbstractBossController {
   public:
-    using AbstractActorController::AbstractActorController;
+    using AbstractBossController::AbstractBossController;
 
     BossDodongo* Typed() const {
         return reinterpret_cast<BossDodongo*>(m_actor);
@@ -44,20 +47,29 @@ class BossDodongoController : public AbstractActorController {
     using DodongoActionFunc = void (*)(BossDodongo*, PlayState*);
     static const DodongoActionFunc* ActionTable(size_t* count) {
         static const DodongoActionFunc sTable[] = {
-            BossDodongo_IntroCutscene,
-            BossDodongo_Walk,
-            BossDodongo_Inhale,
-            BossDodongo_BlowFire,
-            BossDodongo_Roll,
-            BossDodongo_Explode,
-            BossDodongo_LayDown,
-            BossDodongo_Vulnerable,
-            BossDodongo_GetUp,
-            BossDodongo_Damaged,
-            BossDodongo_DeathCutscene,
+            BossDodongo_IntroCutscene, BossDodongo_Walk,    BossDodongo_Inhale,        BossDodongo_BlowFire,
+            BossDodongo_Roll,          BossDodongo_Explode, BossDodongo_LayDown,       BossDodongo_Vulnerable,
+            BossDodongo_GetUp,         BossDodongo_Damaged, BossDodongo_DeathCutscene,
         };
         *count = sizeof(sTable) / sizeof(sTable[0]);
         return sTable;
+    }
+
+
+    const char* GetTitleCard() const override {
+        return gKingDodongoTitleCardENGTex;
+    }
+
+    int16_t* GetCameraSubID() override {
+        return &Typed()->cutsceneCamera;
+    }
+
+    Vec3f_* GetCameraAt() override {
+        return &Typed()->cameraAt;
+    }
+
+    Vec3f_* GetCameraEye() override {
+        return &Typed()->cameraEye;
     }
 
     u8 CurrentActionIndex() const {
@@ -161,7 +173,7 @@ class BossDodongoController : public AbstractActorController {
     }
 
     enum {
-        PROP_ACTION = PROP_CUSTOM_START,
+        PROP_ACTION = PROP_BOSS_END,
         PROP_HEALTH,
         PROP_CS_STATE,
         PROP_TIMERS,
@@ -228,6 +240,11 @@ class BossDodongoController : public AbstractActorController {
         BuildStandardExtendedProperty(PROP_FLAGS, out);
         BuildStandardExtendedProperty(PROP_SHAPE_YOFFSET, out);
         BuildStandardExtendedProperty(PROP_COLOR_FILTER, out);
+
+        BuildBossProperty(PROP_BOSS_CAMERA, out);
+        BuildBossProperty(PROP_BOSS_BGM, out);
+        BuildBossProperty(PROP_BOSS_TITLE_CARD, out);
+        BuildBossProperty(PROP_BOSS_LIGHTING, out);
 
         if (LOCK_CUR_FRAME)
             PackProperty(PROP_ANIM_CUR_FRAME, PackedFloat4(b->skelAnime.curFrame), out);
@@ -321,18 +338,22 @@ class BossDodongoController : public AbstractActorController {
             }
 
             default:
-                return false;
+                return ApplyBossProperty(index, data, propLen);
         }
         return true;
     }
 
     void OnActorInit() override {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
+
+        if (!IsLeader())
+            EndCutsceneCamera();
     }
 
     void OnPropertiesApplied(u64 changed) override {
 
-        if (Typed()->actionFunc == BossDodongo_DeathCutscene && !IsRunningLocally()) {
+        if (Typed()->actionFunc == BossDodongo_DeathCutscene) {
+            EndCutsceneCamera();
             BossDodongo_SetupDeathCutscene(Typed());
             GoLocal();
         }
@@ -344,21 +365,13 @@ class BossDodongoController : public AbstractActorController {
 
     void UpdateLeader(PlayState* play) override {
         AbstractActorController::UpdateLeader(play);
-        if (Typed()->actionFunc == BossDodongo_DeathCutscene && !IsRunningLocally()) {
-            GoLocal();
-        }
-    }
-
-    void OnBecomeLeader() override {
-        if (gPlayState == nullptr) {
-            return;
-        }
 
         BossDodongo* b = Typed();
-        if (b->actionFunc == BossDodongo_IntroCutscene && b->cutsceneCamera == MAIN_CAM) {
-            b->cutsceneCamera = Play_CreateSubCamera(gPlayState);
-        }
+
+        if (b->actionFunc == BossDodongo_DeathCutscene && !Flags_GetClear(play, play->roomCtx.curRoom.num))
+            Flags_SetClear(play, play->roomCtx.curRoom.num);
     }
+
 
     void UpdatePuppet(PlayState* play) override {
         BossDodongo* b = Typed();
@@ -366,18 +379,23 @@ class BossDodongoController : public AbstractActorController {
         UpdateAnimation(&b->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
-            return;
+            if (ClaimLeadership(CLAIM_REASON_COOLDOWN)) {
+                UpdateLeader(play);
+                return;
+            }
         }
+
+        if (b->actionFunc == BossDodongo_IntroCutscene && b->csState == 0 && IsLocalPlayerClosest())
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
+        
 
         b->collider.base.acFlags &= ~AC_HIT;
         for (int i = 0; i < 19; i++)
             b->collider.elements[i].info.bumperFlags &= ~2;
 
-        if (b->actionFunc != BossDodongo_IntroCutscene && b->actionFunc != BossDodongo_DeathCutscene && b->actionFunc != BossDodongo_Roll &&
-            b->actor.xzDistToPlayer < 600.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+        if (b->actionFunc != BossDodongo_IntroCutscene && b->actionFunc != BossDodongo_DeathCutscene &&
+            b->actionFunc != BossDodongo_Roll && b->actor.xzDistToPlayer < 600.0f && IsLocalPlayerClosest())
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         for (int i = 0; i < 50; i++)
             b->unk_25C[i] += b->unk_324[i];
@@ -399,6 +417,6 @@ class BossDodongoController : public AbstractActorController {
     u8 m_currentAnimIndex = ANIM_UNKNOWN;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

@@ -123,13 +123,13 @@ class SmallCrateController : public AbstractActorController {
         ObjKibako* box = Typed();
 
         if (box->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
         if (box->actor.parent == &GET_PLAYER(play)->actor) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

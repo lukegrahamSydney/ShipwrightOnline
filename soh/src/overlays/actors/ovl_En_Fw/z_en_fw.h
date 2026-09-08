@@ -6,7 +6,7 @@
 
 struct EnFw;
 
-typedef void (*EnFwActionFunc)(struct EnFw* this, PlayState* play);
+typedef void (*EnFwActionFunc)(struct EnFw* thisx, PlayState* play);
 
 typedef struct {
     /* 0x0000 */ u8 type;

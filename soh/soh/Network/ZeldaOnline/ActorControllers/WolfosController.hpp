@@ -260,7 +260,7 @@ class WolfosController : public AbstractActorController {
         UpdateAnimation(&wf->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -271,7 +271,7 @@ class WolfosController : public AbstractActorController {
 
         if (wf->actionFunc != EnWf_Die && wf->actor.colChkInfo.health > 0 && wf->actor.xzDistToPlayer < 300.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (wf->eyeIndex == 0) {
             if ((Rand_ZeroOne() < 0.2f) && ((play->gameplayFrames % 4) == 0) && (wf->actor.colorFilterTimer == 0))

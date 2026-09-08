@@ -28,6 +28,8 @@
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
+#include "soh/Enhancements/PlayerSkin/PlayerSkin.h"
+
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -35,6 +37,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+
+const char* ZeldaOnline_LocalSkinName(); // ZO - Get the local players chosen skin
 
 // Some player animations are played at this reduced speed, for reasons yet unclear.
 // This is called "adjusted" for now.
@@ -84,10 +88,10 @@ typedef enum AnimSfxType {
 
 #define ANIMSFX_SHIFT_TYPE(type) ((type) << 11)
 
-#define ANIMSFX_DATA(type, frame) ((ANIMSFX_SHIFT_TYPE(type) | ((frame)&0x7FF)))
+#define ANIMSFX_DATA(type, frame) ((ANIMSFX_SHIFT_TYPE(type) | ((frame) & 0x7FF)))
 
-#define ANIMSFX_GET_TYPE(data) ((data)&0x7800)
-#define ANIMSFX_GET_FRAME(data) ((data)&0x7FF)
+#define ANIMSFX_GET_TYPE(data) ((data) & 0x7800)
+#define ANIMSFX_GET_FRAME(data) ((data) & 0x7FF)
 
 typedef struct AnimSfxEntry {
     /* 0x00 */ u16 sfxId;
@@ -169,7 +173,7 @@ void Player_StartMode_WarpSong(PlayState* play, Player* this);
 void Player_StartMode_FaroresWind(PlayState* play, Player* this);
 void Player_UpdateCommon(Player* this, PlayState* play, Input* input);
 void func_8084FF7C(Player* this);
-void Player_UpdateBunnyEars(Player* this);
+void Player_UpdateBunnyEars(Player* this, BunnyEarKinematics* bunnyEarKinematics);
 void func_80851008(PlayState* play, Player* this, void* anim);
 void func_80851030(PlayState* play, Player* this, void* anim);
 void func_80851050(PlayState* play, Player* this, void* anim);
@@ -2269,9 +2273,9 @@ void Player_InitExplosiveIA(PlayState* play, Player* this) {
     explosiveType = Player_GetExplosiveHeld(this);
     explosiveInfo = &sExplosiveInfos[explosiveType];
 
-    spawnedActor =
-        Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, explosiveInfo->actorId, this->actor.world.pos.x,
-                           this->actor.world.pos.y, this->actor.world.pos.z, 0, this->actor.shape.rot.y, 0, 0);
+    spawnedActor = Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, explosiveInfo->actorId,
+                                      this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, 0,
+                                      this->actor.shape.rot.y, 0, (s16)explosiveType);
     if (spawnedActor != NULL) {
         if ((explosiveType != 0) && (play->bombchuBowlingStatus != 0)) {
             if (!CVarGetInteger(CVAR_CHEAT("InfiniteAmmo"), 0)) {
@@ -3276,7 +3280,7 @@ s32 func_80835B60(Player* this, PlayState* play) {
     if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
         Player_SetUpperActionFunc(this, func_80835C08);
         LinkAnimation_PlayOnce(play, &this->upperSkelAnime, &gPlayerAnim_link_boom_catch);
-        func_808357E8(this, gPlayerLeftHandBoomerangDLs);
+        func_808357E8(this, Player_GetSkin(this)->dlistGroups[PLAYER_MODELTYPE_LH_BOOMERANG]);
         Player_PlaySfx(this, NA_SE_PL_CATCH_BOOMERANG);
         Player_PlayVoiceSfx(this, NA_SE_VO_LI_SWORD_N);
 
@@ -10739,10 +10743,6 @@ static EffectBlureInit2 blureSword = {
 
 static Vec3s sSkeletonBaseTransl = { -57, 3377, 0 };
 
-void Player_SetSkinPrefix(Player* self, const char* prefix) {
-    snprintf(self->skinPrefix, sizeof(self->skinPrefix), "%s", prefix);
-}
-
 void Player_InitCommon(Player* this, PlayState* play, FlexSkeletonHeader* skelHeader) {
     this->getItemEntry = (GetItemEntry)GET_ITEM_NONE;
     this->ageProperties = &sAgeProperties[gSaveContext.linkAge];
@@ -10796,6 +10796,9 @@ static Vec3f D_80854778 = { 0.0f, 50.0f, 0.0f };
 
 void Player_Init(Actor* thisx, PlayState* play2) {
     Player* this = (Player*)thisx;
+    this->skin = PlayerSkin_Get(ZeldaOnline_LocalSkinName());
+
+
     PlayState* play = play2;
     SceneTableEntry* scene = play->loadedScene;
     u32 titleFileSize;
@@ -10830,8 +10833,11 @@ void Player_Init(Actor* thisx, PlayState* play2) {
         }
         this->currentMask = gSaveContext.ship.maskMemory;
     }
-    
-    Player_InitCommon(this, play, gPlayerSkelHeaders[((void)0, gSaveContext.linkAge)]);
+
+    // Player_InitCommon(this, play, ZeldaOnline_PlayerSkelHeaders(this)[((void)0, gSaveContext.linkAge)]);
+
+
+    Player_InitCommon(this, play, this->skin->skel[gSaveContext.linkAge]);
 
     // `giObjectSegment` is used for both "get item" objects and title cards. The maximum size for
     // get item objects is 0x2000 (see the assert in func_8083AE40), and the maximum size for
@@ -11789,6 +11795,8 @@ static Vec3f D_80854814 = { 0.0f, 0.0f, 200.0f };
 
 static f32 sWaterConveyorSpeeds[] = { 2.0f, 4.0f, 7.0f };
 static f32 sFloorConveyorSpeeds[] = { 0.5f, 1.0f, 3.0f };
+static BunnyEarKinematics sBunnyEarKinematics;
+BunnyEarKinematics* gCurrentDrawBunnyEar = &sBunnyEarKinematics;
 
 void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     s32 pad;
@@ -11906,7 +11914,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         this->actor.shape.face = this->unk_3A8[0] + ((play->gameplayFrames & 32) ? 0 : 3);
 
         if (this->currentMask == PLAYER_MASK_BUNNY) {
-            Player_UpdateBunnyEars(this);
+            Player_UpdateBunnyEars(this, &sBunnyEarKinematics);
         }
 
         if (func_8002DD6C(this) != 0) {
@@ -12205,6 +12213,7 @@ static Vec3f D_80854838 = { 0.0f, 0.0f, -30.0f };
 s32 Player_UpdateNoclip(Player* this, PlayState* play);
 
 void Player_Update(Actor* thisx, PlayState* play) {
+
     static Vec3f sDogSpawnPos;
     Player* this = (Player*)thisx;
     s32 dogParams;
@@ -12334,13 +12343,6 @@ void Player_Update(Actor* thisx, PlayState* play) {
     GameInteractor_ExecuteOnPlayerUpdate();
 }
 
-typedef struct BunnyEarKinematics {
-    /* 0x0 */ Vec3s rot;
-    /* 0x6 */ Vec3s angVel;
-} BunnyEarKinematics; // size = 0xC
-
-static BunnyEarKinematics sBunnyEarKinematics;
-
 static Gfx* sMaskDlists[PLAYER_MASK_MAX - 1] = {
     gLinkChildKeatonMaskDL, gLinkChildSkullMaskDL, gLinkChildSpookyMaskDL, gLinkChildBunnyHoodDL,
     gLinkChildGoronMaskDL,  gLinkChildZoraMaskDL,  gLinkChildGerudoMaskDL, gLinkChildMaskOfTruthDL,
@@ -12351,14 +12353,16 @@ static Vec3s D_80854864 = { 0, 0, 0 };
 void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList, OverrideLimbDrawOpa overrideLimbDraw) {
     static s32 D_8085486C = 255;
 
+    PlayerSkin* skin = Player_GetSkin(this);
+
     OPEN_DISPS(play->state.gfxCtx);
 
     gSPSegment(POLY_OPA_DISP++, 0x0C, cullDList);
     gSPSegment(POLY_XLU_DISP++, 0x0C, cullDList);
 
-    Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, this->skinPrefix[0] == '\0' ? lod : 0,
-                    this->currentTunic, this->currentBoots, this->actor.shape.face, overrideLimbDraw,
-                    Player_PostLimbDrawGameplay, this);
+    Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
+                    skin->name[0] == '\0' ? lod : 0, this->currentTunic, this->currentBoots,
+                    this->actor.shape.face, overrideLimbDraw, Player_PostLimbDrawGameplay, this);
 
     if ((overrideLimbDraw == Player_OverrideLimbDrawGameplayDefault) && (this->currentMask != PLAYER_MASK_NONE)) {
         // Fixes a bug in vanilla where ice traps are rendered extremely large while wearing a bunny hood
@@ -12373,17 +12377,17 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
             gSPSegment(POLY_OPA_DISP++, 0x0B, bunnyEarMtx);
 
             // Right ear
-            earRot.x = sBunnyEarKinematics.rot.y + 0x3E2;
-            earRot.y = sBunnyEarKinematics.rot.z + 0xDBE;
-            earRot.z = sBunnyEarKinematics.rot.x - 0x348A;
+            earRot.x = gCurrentDrawBunnyEar->rot.y + 0x3E2;
+            earRot.y = gCurrentDrawBunnyEar->rot.z + 0xDBE;
+            earRot.z = gCurrentDrawBunnyEar->rot.x - 0x348A;
             Matrix_SetTranslateRotateYXZ(97.0f, -1203.0f - CVarGetFloat(CVAR_COSMETIC("BunnyHood.EarLength"), 0.0f),
                                          -240.0f - CVarGetFloat(CVAR_COSMETIC("BunnyHood.EarSpread"), 0.0f), &earRot);
             MATRIX_TOMTX(bunnyEarMtx++);
 
             // Left ear
-            earRot.x = sBunnyEarKinematics.rot.y - 0x3E2;
-            earRot.y = -0xDBE - sBunnyEarKinematics.rot.z;
-            earRot.z = sBunnyEarKinematics.rot.x - 0x348A;
+            earRot.x = gCurrentDrawBunnyEar->rot.y - 0x3E2;
+            earRot.y = -0xDBE - gCurrentDrawBunnyEar->rot.z;
+            earRot.z = gCurrentDrawBunnyEar->rot.x - 0x348A;
             Matrix_SetTranslateRotateYXZ(97.0f, -1203.0f - CVarGetFloat(CVAR_COSMETIC("BunnyHood.EarLength"), 0.0f),
                                          240.0f + CVarGetFloat(CVAR_COSMETIC("BunnyHood.EarSpread"), 0.0f), &earRot);
             MATRIX_TOMTX(bunnyEarMtx);
@@ -15036,47 +15040,47 @@ void func_8084FF7C(Player* this) {
 /**
  * Updates the Bunny Hood's floppy ears' rotation and velocity.
  */
-void Player_UpdateBunnyEars(Player* this) {
+void Player_UpdateBunnyEars(Player* this, BunnyEarKinematics* bunnyEarKinematics) {
     Vec3s force;
     s16 angle;
 
     // Damping: decay by 1/8 the previous value each frame
-    sBunnyEarKinematics.angVel.x -= sBunnyEarKinematics.angVel.x >> 3;
-    sBunnyEarKinematics.angVel.y -= sBunnyEarKinematics.angVel.y >> 3;
+    bunnyEarKinematics->angVel.x -= bunnyEarKinematics->angVel.x >> 3;
+    bunnyEarKinematics->angVel.y -= bunnyEarKinematics->angVel.y >> 3;
 
     // Elastic restorative force
-    sBunnyEarKinematics.angVel.x += -sBunnyEarKinematics.rot.x >> 2;
-    sBunnyEarKinematics.angVel.y += -sBunnyEarKinematics.rot.y >> 2;
+    bunnyEarKinematics->angVel.x += -bunnyEarKinematics->rot.x >> 2;
+    bunnyEarKinematics->angVel.y += -bunnyEarKinematics->rot.y >> 2;
 
     // Forcing from motion relative to shape frame
     angle = this->actor.world.rot.y - this->actor.shape.rot.y;
     force.x = (s32)(this->actor.speedXZ * -200.0f * Math_CosS(angle) * (Rand_CenteredFloat(2.0f) + 10.0f)) & 0xFFFF;
     force.y = (s32)(this->actor.speedXZ * 100.0f * Math_SinS(angle) * (Rand_CenteredFloat(2.0f) + 10.0f)) & 0xFFFF;
 
-    sBunnyEarKinematics.angVel.x += force.x >> 2;
-    sBunnyEarKinematics.angVel.y += force.y >> 2;
+    bunnyEarKinematics->angVel.x += force.x >> 2;
+    bunnyEarKinematics->angVel.y += force.y >> 2;
 
     // Clamp both angular velocities to [-6000, 6000]
-    if (sBunnyEarKinematics.angVel.x > 6000) {
-        sBunnyEarKinematics.angVel.x = 6000;
-    } else if (sBunnyEarKinematics.angVel.x < -6000) {
-        sBunnyEarKinematics.angVel.x = -6000;
+    if (bunnyEarKinematics->angVel.x > 6000) {
+        bunnyEarKinematics->angVel.x = 6000;
+    } else if (bunnyEarKinematics->angVel.x < -6000) {
+        bunnyEarKinematics->angVel.x = -6000;
     }
-    if (sBunnyEarKinematics.angVel.y > 6000) {
-        sBunnyEarKinematics.angVel.y = 6000;
-    } else if (sBunnyEarKinematics.angVel.y < -6000) {
-        sBunnyEarKinematics.angVel.y = -6000;
+    if (bunnyEarKinematics->angVel.y > 6000) {
+        bunnyEarKinematics->angVel.y = 6000;
+    } else if (bunnyEarKinematics->angVel.y < -6000) {
+        bunnyEarKinematics->angVel.y = -6000;
     }
 
     // Add angular velocity to rotations
-    sBunnyEarKinematics.rot.x += sBunnyEarKinematics.angVel.x;
-    sBunnyEarKinematics.rot.y += sBunnyEarKinematics.angVel.y;
+    bunnyEarKinematics->rot.x += bunnyEarKinematics->angVel.x;
+    bunnyEarKinematics->rot.y += bunnyEarKinematics->angVel.y;
 
     // swivel ears outwards if bending backwards
-    if (sBunnyEarKinematics.rot.x < 0) {
-        sBunnyEarKinematics.rot.z = sBunnyEarKinematics.rot.x >> 1;
+    if (bunnyEarKinematics->rot.x < 0) {
+        bunnyEarKinematics->rot.z = bunnyEarKinematics->rot.x >> 1;
     } else {
-        sBunnyEarKinematics.rot.z = 0;
+        bunnyEarKinematics->rot.z = 0;
     }
 }
 
@@ -15991,9 +15995,9 @@ void func_80851A50(PlayState* play, Player* this, CsCmdActorCue* cue) {
         this->interactRangeActor->parent = &this->actor;
 
         if (!LINK_IS_ADULT) {
-            dLists = gPlayerLeftHandBgsDLs;
+            dLists = Player_GetSkin(this)->dlistGroups[PLAYER_MODELTYPE_LH_BGS];
         } else {
-            dLists = gPlayerLeftHandClosedDLs;
+            dLists = Player_GetSkin(this)->dlistGroups[PLAYER_MODELTYPE_LH_CLOSED];
         }
         this->leftHandDLists = &dLists[gSaveContext.linkAge];
 
@@ -16304,7 +16308,7 @@ void func_80852648(PlayState* play, Player* this, CsCmdActorCue* cue) {
         this->heldItemAction = this->itemAction = PLAYER_IA_NONE;
         this->heldItemId = ITEM_NONE;
         this->modelGroup = this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_NONE);
-        this->leftHandDLists = gPlayerLeftHandOpenDLs;
+        this->leftHandDLists = Player_GetSkin(this)->dlistGroups[PLAYER_MODELTYPE_LH_OPEN];
 
         // If MS sword is shuffled and not in the players inventory, then we need to unequip the current sword
         // and set swordless flag to mimic Link having his weapon knocked out of his hand in the Ganon fight
@@ -16649,4 +16653,42 @@ void Player_StartTalking(PlayState* play, Actor* actor) {
         this->naviActor->flags |= ACTOR_FLAG_TALK;
         func_80835EA4(play, 0xB);
     }
+}
+
+void SkeletonPatcher_UnregisterSkeleton(SkelAnime* skelAnime);
+void Player_ReapplySkeleton(Player* thisx, PlayState* play) {
+    PlayerSkin* skin = Player_GetSkin(thisx);
+    FlexSkeletonHeader* skelHeader = skin->skel[gSaveContext.linkAge];
+
+    SkeletonPatcher_UnregisterSkeleton(&thisx->skelAnime);
+    SkeletonPatcher_UnregisterSkeleton(&thisx->upperSkelAnime);
+
+    /*
+    SkelAnime_InitLink(play, &thisx->skelAnime, skelHeader,
+                       GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, thisx->modelAnimType), 9, thisx->jointTable,
+                       thisx->morphTable, PLAYER_LIMB_MAX);
+    thisx->skelAnime.baseTransl = sSkeletonBaseTransl;
+
+    SkelAnime_InitLink(play, &thisx->upperSkelAnime, skelHeader, Player_GetIdleAnim(thisx), 9, thisx->upperJointTable,
+                       thisx->upperMorphTable, PLAYER_LIMB_MAX);*/
+
+    void* animation = thisx->skelAnime.animation == NULL
+                          ? GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, thisx->modelAnimType)
+                          : thisx->skelAnime.animation;
+
+    void* upperAnimation = thisx->upperSkelAnime.animation == NULL
+                            ? Player_GetIdleAnim(thisx) 
+                            : thisx->upperSkelAnime.animation;
+
+    SkelAnime_InitLink(play, &thisx->skelAnime, skelHeader, (LinkAnimationHeader*)animation, 9, thisx->jointTable,
+                    thisx->morphTable, PLAYER_LIMB_MAX);
+    thisx->skelAnime.baseTransl = sSkeletonBaseTransl;
+
+    SkelAnime_InitLink(play, &thisx->upperSkelAnime, skelHeader, (LinkAnimationHeader*)upperAnimation, 9,
+                       thisx->upperJointTable,
+                    thisx->upperMorphTable, PLAYER_LIMB_MAX);
+
+    thisx->upperSkelAnime.baseTransl = sSkeletonBaseTransl;
+
+    Player_SetModelGroup(thisx, thisx->modelGroup);
 }

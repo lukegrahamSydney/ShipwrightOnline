@@ -26,6 +26,8 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
     play->sceneNum = sceneId;
     play->sceneConfig = scene->config;
 
+    GameInteractor_ExecuteOnSceneLoad(sceneId);
+
     // osSyncPrintf("\nSCENE SIZE %fK\n", (scene->sceneFile.vromEnd - scene->sceneFile.vromStart) / 1024.0f);
 
     // Scenes considered "dungeon" with a MQ variant

@@ -107,7 +107,7 @@ class PushBlockController : public AbstractActorController {
         ObjOshihiki* block = Typed();
 
         if (fabsf(block->dyna.unk_150) > 0.001f) {
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
             block->dyna.unk_150 = 0.0f;
         }
 

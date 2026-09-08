@@ -140,8 +140,10 @@ void Title_Main(GameState* thisx) {
         this->state.running = false;
         SET_NEXT_GAMESTATE(&this->state, Opening_Init, OpeningContext);
     }
-
+    GameInteractor_ExecuteOnDrawOverlay(this->state.gfxCtx);
     CLOSE_DISPS(this->state.gfxCtx);
+
+
 }
 
 void Title_Destroy(GameState* thisx) {

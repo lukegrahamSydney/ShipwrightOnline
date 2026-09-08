@@ -6,7 +6,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ResourceManagerHelpers.h"
-
+#include "soh/Enhancements/PlayerSkin/PlayerSkin.h"
 extern "C" {
 #include "macros.h"
 #include "functions.h"
@@ -48,6 +48,11 @@ static const char* ResolveCustomFPSHand(const char* path) {
 
 static Gfx* LoadGfxByName(const char* path) {
     return path ? ResourceMgr_LoadGfxByName(path) : nullptr;
+}
+
+static Gfx* LoadSkinHandGfx(Player* player, s32 modelType, bool isAdult) {
+    Gfx** group = Player_GetSkin(player)->dlistGroups[modelType];
+    return group ? LoadGfxByName((const char*)group[isAdult ? 0 : 1]) : nullptr;
 }
 
 static Gfx* LoadCustomGfx(const char* path) {
@@ -238,7 +243,8 @@ static void RegisterCustomEquipment() {
                     player->itemAction == PLAYER_IA_OCARINA_FAIRY || player->itemAction == PLAYER_IA_OCARINA_OF_TIME ||
                     player->modelGroup == PLAYER_MODELGROUP_OCARINA || player->modelGroup == PLAYER_MODELGROUP_OOT;
                 if (isOcarina) {
-                    Gfx* resolvedHand = LoadGfxByName(isAdult ? gLinkAdultLeftHandNearDL : gLinkChildLeftHandNearDL);
+
+                    Gfx* resolvedHand = LoadSkinHandGfx(player, PLAYER_MODELTYPE_LH_OPEN, isAdult);
                     if (resolvedHand) {
                         Gfx* buf = (Gfx*)Graph_Alloc(play->state.gfxCtx, 2 * sizeof(Gfx));
                         Gfx* p = buf;
@@ -291,8 +297,7 @@ static void RegisterCustomEquipment() {
                 }
                 Gfx* resolvedCustom = LoadCustomGfx(customDL);
                 if (resolvedCustom) {
-                    Gfx* resolvedHand =
-                        LoadGfxByName(isAdult ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+                    Gfx* resolvedHand = LoadSkinHandGfx(player, PLAYER_MODELTYPE_LH_CLOSED, isAdult);
                     if (resolvedHand) {
                         const u8 lht = (u8)player->leftHandType;
                         const bool scaleHand = IsScalingAdultItemAsChild() &&
@@ -407,10 +412,8 @@ static void RegisterCustomEquipment() {
                     }
                     Gfx* resolvedCustom = LoadCustomGfx(customDL);
                     if (resolvedCustom) {
-                        const char* handPath =
-                            useOpenHand ? (isAdult ? gLinkAdultRightHandNearDL : gLinkChildRightHandNearDL)
-                                        : (isAdult ? gLinkAdultRightHandClosedNearDL : gLinkChildRightHandClosedNearDL);
-                        Gfx* resolvedHand = LoadGfxByName(handPath);
+                        Gfx* resolvedHand = LoadSkinHandGfx(
+                            player, useOpenHand ? PLAYER_MODELTYPE_RH_OPEN : PLAYER_MODELTYPE_RH_CLOSED, isAdult);
                         if (resolvedHand) {
                             const u8 rht = (u8)player->rightHandType;
                             const bool scaleHand =
@@ -517,8 +520,7 @@ static void RegisterCustomEquipment() {
                 }
                 Gfx* resolvedCustom = LoadCustomGfx(customDL);
                 if (resolvedCustom) {
-                    Gfx* resolvedHand =
-                        LoadGfxByName(isAdult ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+                    Gfx* resolvedHand = LoadSkinHandGfx(player, PLAYER_MODELTYPE_LH_CLOSED, isAdult);
                     if (resolvedHand) {
                         Gfx* buf = (Gfx*)Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx));
                         Gfx* p = buf;
@@ -547,8 +549,7 @@ static void RegisterCustomEquipment() {
                 }
                 Gfx* resolvedCustom = LoadCustomGfx(customDL);
                 if (resolvedCustom) {
-                    Gfx* resolvedHand =
-                        LoadGfxByName(isAdult ? gLinkAdultRightHandClosedNearDL : gLinkChildRightHandClosedNearDL);
+                    Gfx* resolvedHand = LoadSkinHandGfx(player, PLAYER_MODELTYPE_RH_CLOSED, isAdult);
                     if (resolvedHand) {
                         Gfx* buf = (Gfx*)Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx));
                         Gfx* p = buf;
@@ -620,7 +621,7 @@ static void RegisterCustomEquipment() {
             gSPDisplayList(play->state.gfxCtx->polyOpa.p++, resolvedChain);
         }
     });
-
+    
     COND_VB_SHOULD(VB_PLAYER_DRAW_BOTTLE, CVarGetInteger(CVAR_SETTING("AltAssets"), 1), {
         Player* player = va_arg(args, Player*);
         PlayState* play = va_arg(args, PlayState*);

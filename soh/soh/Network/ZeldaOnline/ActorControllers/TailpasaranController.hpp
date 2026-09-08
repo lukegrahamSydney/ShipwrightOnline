@@ -180,7 +180,7 @@ class TailpasaranController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (m_currentActionIndex == ID_DIE && !IsRunningLocally()) {
+        if (m_currentActionIndex == ID_DIE) {
             EnTp_SetupDie(Typed());
             GoLocal();
         }
@@ -190,7 +190,7 @@ class TailpasaranController : public AbstractActorController {
         EnTp* tp = Typed();
 
         if (TailChainWasHit() || (tp->collider.base.acFlags & AC_HIT)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -198,7 +198,7 @@ class TailpasaranController : public AbstractActorController {
         tp->collider.base.atFlags &= ~AT_HIT;
 
         if (m_currentActionIndex != ID_DIE && tp->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         tp->actor.shape.rot.z += 0x800;
 

@@ -36,22 +36,17 @@ class HeishiController : public AbstractActorController {
 
   protected:
     static constexpr u8 ID_UNKNOWN = 0xFF;
-    static constexpr u8 ID_SETUP_WALK = 2;
+    static constexpr u8 ID_WALK = 1;
+    static constexpr u8 ID_WAIT_NIGHT = 5;
 
     using HeishiActionFunc = void (*)(EnHeishi1*, PlayState*);
     static const HeishiActionFunc* ActionTable(size_t* count) {
         static const HeishiActionFunc sTable[] = {
-            EnHeishi1_SetupWait,
             EnHeishi1_Wait,
-            EnHeishi1_SetupWalk,
             EnHeishi1_Walk,
-            EnHeishi1_SetupMoveToLink,
             EnHeishi1_MoveToLink,
-            EnHeishi1_SetupTurnTowardLink,
             EnHeishi1_TurnTowardLink,
-            EnHeishi1_SetupKick,
             EnHeishi1_Kick,
-            EnHeishi1_SetupWaitNight,
             EnHeishi1_WaitNight,
         };
         *count = sizeof(sTable) / sizeof(sTable[0]);
@@ -69,9 +64,9 @@ class HeishiController : public AbstractActorController {
 
     bool IsCatching() const {
         EnHeishi1* hs = Typed();
-        return hs->actionFunc == EnHeishi1_SetupMoveToLink || hs->actionFunc == EnHeishi1_MoveToLink ||
-               hs->actionFunc == EnHeishi1_SetupTurnTowardLink || hs->actionFunc == EnHeishi1_TurnTowardLink ||
-               hs->actionFunc == EnHeishi1_SetupKick || hs->actionFunc == EnHeishi1_Kick;
+        return hs->actionFunc == EnHeishi1_MoveToLink ||
+               hs->actionFunc == EnHeishi1_TurnTowardLink ||
+               hs->actionFunc == EnHeishi1_Kick;
     }
 
     bool IsPatrolling() const {
@@ -92,6 +87,13 @@ class HeishiController : public AbstractActorController {
             return ANIM_UNKNOWN;
         return (strcmp(cur, gEnHeishiWalkAnim) == 0) ? ANIM_WALK : ANIM_IDLE;
     }
+    
+
+    u8 CalmActionIndex() const {
+        if (!IsCatching())
+            return CurrentActionIndex();
+        return (Typed()->type == 5) ? ID_WAIT_NIGHT : ID_WALK;
+    }
 
     enum {
         PROP_ACTION = PROP_CUSTOM_START,
@@ -107,7 +109,7 @@ class HeishiController : public AbstractActorController {
     void BuildCustomProperties(ByteStream& out) override {
         EnHeishi1* hs = Typed();
 
-        PackProperty(PROP_ACTION, PackedUInt1(IsCatching() ? ID_SETUP_WALK : CurrentActionIndex()), out);
+        PackProperty(PROP_ACTION, PackedUInt1(CalmActionIndex()), out);
         PackProperty(PROP_WAYPOINT, ByteStream() << PackedInt2(hs->waypoint) << PackedInt2(hs->waypointTimer), out);
         PackProperty(
             PROP_TIMERS,
@@ -191,8 +193,14 @@ class HeishiController : public AbstractActorController {
     }
 
     void OnBecomeLeader() override {
-        if (IsCatching())
+        if (!IsCatching())
+            return;
+
+        if (Typed()->type == 5) {
+            EnHeishi1_SetupWaitNight(Typed(), gPlayState);
+        } else {
             EnHeishi1_SetupWalk(Typed(), gPlayState);
+        }
     }
 
     void UpdatePuppet(PlayState* play) override {
@@ -201,7 +209,7 @@ class HeishiController : public AbstractActorController {
         UpdateAnimation(&hs->skelAnime, LOCK_CUR_FRAME);
 
         if (!IsCatching() && hs->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         hs->activeTimer++;
 

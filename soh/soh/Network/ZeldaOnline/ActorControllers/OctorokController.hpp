@@ -44,6 +44,11 @@ class OctorokController : public AbstractActorController {
         return Typed()->actor.params == ParamsProjectile;
     }
 
+    
+    void OnActorInit() override {
+        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
+    }
+
     using OkutaActionFunc = void (*)(EnOkuta*, PlayState*);
     static const OkutaActionFunc* ActionTable(size_t* count) {
         static const OkutaActionFunc sTable[] = {
@@ -238,7 +243,7 @@ class OctorokController : public AbstractActorController {
             UpdateAnimation(&ok->skelAnime, LOCK_CUR_FRAME);
 
         if (!IsProjectile() && HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -247,7 +252,7 @@ class OctorokController : public AbstractActorController {
 
         if (!IsProjectile() && ok->actionFunc != EnOkuta_Die && ok->actor.colChkInfo.health > 0 &&
             ok->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         EnsureDrawState();
 

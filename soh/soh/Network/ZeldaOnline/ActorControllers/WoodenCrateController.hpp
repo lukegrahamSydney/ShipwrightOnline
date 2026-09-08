@@ -95,7 +95,7 @@ class WoodenCrateController : public AbstractActorController {
         ObjKibako2* box = Typed();
 
         if (BreakWouldFire(play)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

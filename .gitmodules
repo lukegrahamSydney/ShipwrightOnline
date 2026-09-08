@@ -1,6 +1,6 @@
 [submodule "libultraship"]
 	path = libultraship
-	url = https://github.com/kenix3/libultraship.git
+	url = https://github.com/lukegrahamSydney/libultraship.git
 	branch = port-maintenance
 [submodule "ZAPDTR"]
 	path = ZAPDTR

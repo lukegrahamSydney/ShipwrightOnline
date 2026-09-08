@@ -89,6 +89,26 @@ static u8 sStaggerTimer;
 static s8 sLastSwordAnim;
 static u8 sAlpha;
 
+f32* gEnTorch2StickTilt = &sStickTilt;
+s16* gEnTorch2StickAngle = &sStickAngle;
+f32* gEnTorch2SwordJumpHeight = &sSwordJumpHeight;
+s32* gEnTorch2HoldShieldTimer = &sHoldShieldTimer;
+u8* gEnTorch2ZTargetFlag = &sZTargetFlag;
+u8* gEnTorch2DeathFlag = &sDeathFlag;
+u8* gEnTorch2SwordJumpState = &sSwordJumpState;
+Vec3f* gEnTorch2SpawnPoint = &sSpawnPoint;
+u8* gEnTorch2JumpslashTimer = &sJumpslashTimer;
+u8* gEnTorch2JumpslashFlag = &sJumpslashFlag;
+u8* gEnTorch2ActionState = &sActionState;
+u8* gEnTorch2SwordJumpTimer = &sSwordJumpTimer;
+u8* gEnTorch2CounterState = &sCounterState;
+u8* gEnTorch2DodgeRollState = &sDodgeRollState;
+u8* gEnTorch2StaggerCount = &sStaggerCount;
+u8* gEnTorch2StaggerTimer = &sStaggerTimer;
+s8* gEnTorch2LastSwordAnim = &sLastSwordAnim;
+u8* gEnTorch2Alpha = &sAlpha;
+
+
 static DamageTable sDamageTable = {
     /* Deku nut      */ DMG_ENTRY(0, 0x1),
     /* Deku stick    */ DMG_ENTRY(2, 0x0),

@@ -30,6 +30,7 @@ void BgHakaTrap_GetSwitchFlag(BgHakaTrap* this);
 
 UNK_TYPE D_80880F30 = 0;
 
+
 const ActorInit Bg_Haka_Trap_InitVars = {
     ACTOR_BG_HAKA_TRAP,
     ACTORCAT_BG,
@@ -228,7 +229,8 @@ void BgHakaTrap_UpdateBodyColliderPos(BgHakaTrap* this, PlayState* play) {
     this->colliderCylinder.dim.pos.z = this->dyna.actor.world.pos.z + sp28.x * sine + sp28.z * cosine;
 }
 
-static UNK_TYPE D_80881018 = 0;
+UNK_TYPE D_80881018 = 0;
+UNK_TYPE* gBgHakaTrapWallMask = &D_80881018;
 void BgHakaTrap_SpikedWall_CloseIn(BgHakaTrap* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 

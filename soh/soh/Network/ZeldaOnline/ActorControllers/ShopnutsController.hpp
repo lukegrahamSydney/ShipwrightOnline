@@ -160,7 +160,7 @@ class ShopnutsController : public AbstractActorController {
         UpdateAnimation(&sn->skelAnime, LOCK_CUR_FRAME);
 
         if (sn->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -168,7 +168,7 @@ class ShopnutsController : public AbstractActorController {
 
         if (sn->actionFunc != EnShopnuts_Burrow && sn->actionFunc != EnShopnuts_SpawnSalesman &&
             sn->actor.xzDistToPlayer < 480.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (sn->actionFunc == EnShopnuts_Wait) {
             Actor_SetFocus(&sn->actor, sn->skelAnime.curFrame);

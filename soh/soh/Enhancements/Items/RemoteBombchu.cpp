@@ -158,7 +158,10 @@ static void HandleInput(EnBomChu* chu, Input* input, PlayState* play) {
 
 // Track the most recently spawned bombchu
 static void OnActorInit(void* refActor) {
-    sState.activeChu = (EnBomChu*)refActor;
+    EnBomChu* bombChu = (EnBomChu*) refActor;
+
+    if (bombChu->actor.params == 1)
+        sState.activeChu = (EnBomChu*)refActor;
 }
 
 // Clean up if active bombchu is destroyed

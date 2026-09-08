@@ -152,7 +152,7 @@ class DeadHandArmController : public AbstractActorController {
             !AnotherHandIsHolding(play)) {
             auto* head = static_cast<AbstractActorController*>(dha->actor.parent->zoController);
             if (!head->IsLeader()) {
-                head->ClaimLeadership(CLAIM_REASON_HIT);
+                head->ClaimLeadership(CLAIM_REASON_NOW);
             }
         }
         m_wasHolding = holding;
@@ -179,13 +179,13 @@ class DeadHandArmController : public AbstractActorController {
 
         if (!IsHoldingSomeone()) {
             if (dha->collider.base.acFlags & AC_HIT) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 return;
             }
 
             if (dha->actionFunc != EnDha_Die && dha->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-                ClaimLeadership(CLAIM_REASON_PROXIMITY);
+                ClaimLeadership(CLAIM_REASON_COOLDOWN);
         }
         dha->collider.base.acFlags &= ~AC_HIT;
 

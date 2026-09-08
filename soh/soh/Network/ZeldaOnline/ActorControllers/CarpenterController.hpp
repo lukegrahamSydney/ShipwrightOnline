@@ -131,7 +131,7 @@ class CarpenterController : public AbstractActorController {
         UpdateAnimation(&dk->skelAnime, LOCK_CUR_FRAME);
 
         if (dk->actor.xzDistToPlayer < 150.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         Collider_UpdateCylinder(&dk->actor, &dk->collider);
         if (dk->flags & NPCFLAG_WIDE_COLLIDER) {

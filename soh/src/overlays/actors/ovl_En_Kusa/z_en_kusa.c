@@ -257,6 +257,7 @@ void EnKusa_Init(Actor* thisx, PlayState* play) {
 
     if (!EnKusa_SnapToFloor(this, play, 0.0f)) {
         Actor_Kill(&this->actor);
+        ++this->initCalled;
         return;
     }
 
@@ -266,9 +267,12 @@ void EnKusa_Init(Actor* thisx, PlayState* play) {
         // "Bank danger!"
         osSyncPrintf("Error : バンク危険！ (arg_data 0x%04x)(%s %d)\n", thisx->params, __FILE__, __LINE__);
         Actor_Kill(&this->actor);
+        ++this->initCalled;
         return;
     }
 
+    printf("EnKusa_Init::sizeof()=%u\n", (unsigned int)sizeof(Actor));
+    ++this->initCalled;
     EnKusa_SetupWaitObject(this);
 }
 

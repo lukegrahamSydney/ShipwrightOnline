@@ -67,11 +67,5 @@ void PlayerPuppet_Destroy(Actor* actor, PlayState* play);
 #endif
 }
 
-typedef struct {
-    u8 active;
-    u8 linkAge;
-    char name[17];
-} PlayerPuppetSpawnContext;
 
-extern PlayerPuppetSpawnContext gZeldaOnlinePuppetSpawn;
 #endif

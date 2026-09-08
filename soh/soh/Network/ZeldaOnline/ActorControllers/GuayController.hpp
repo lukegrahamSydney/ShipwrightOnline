@@ -155,7 +155,7 @@ class GuayController : public AbstractActorController {
         UpdateAnimation(&crow->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -164,7 +164,7 @@ class GuayController : public AbstractActorController {
 
         if (crow->actionFunc != EnCrow_Die && crow->actionFunc != EnCrow_Respawn &&
             crow->actionFunc != EnCrow_Damaged && crow->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         crow->actor.world.rot.y = crow->actor.shape.rot.y;
         crow->actor.world.rot.x = -crow->actor.shape.rot.x;

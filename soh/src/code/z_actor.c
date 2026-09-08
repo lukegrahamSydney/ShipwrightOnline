@@ -1254,17 +1254,20 @@ void Actor_Init(Actor* actor, PlayState* play, int delayInit) {
     CollisionCheck_InitInfo(&actor->colChkInfo);
     actor->floorBgId = BGCHECK_SCENE;
     ActorShape_Init(&actor->shape, 0.0f, NULL, 0.0f);
-    if (!delayInit && Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
-        Actor_SetObjectDependency(play, actor);
 
-        if (GameInteractor_ShouldActorInit(actor)) {
-            actor->init(actor, play);
-            actor->init = NULL;
+    if (!GameInteractor_ShouldActorDelayInit(actor) && !delayInit) {
+        if (Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
+            Actor_SetObjectDependency(play, actor);
 
-            GameInteractor_ExecuteOnActorInit(actor);
-        } else {
-            actor->init = NULL;
-            Actor_Kill(actor);
+            if (GameInteractor_ShouldActorInit(actor)) {
+                actor->init(actor, play);
+                actor->init = NULL;
+
+                GameInteractor_ExecuteOnActorInit(actor);
+            } else {
+                actor->init = NULL;
+                Actor_Kill(actor);
+            }
         }
     }
 }
@@ -2590,15 +2593,17 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
     unkFlag = 0;
 
     if (play->numSetupActors != 0) {
-        actorEntry = &play->setupActorList[0];
-        for (i = 0; i < play->numSetupActors; i++) {
-            Actor* spawnedActor = Actor_SpawnEntry(&play->actorCtx, actorEntry++, play);
-            // #region SOH [ObjectExtension] ActorListIndex tracking
-            SetActorListIndex(spawnedActor, (s16)i);
-            // #endregion
+        if (GameInteractor_ShouldLoadSetupActors()) {
+            actorEntry = &play->setupActorList[0];
+            for (i = 0; i < play->numSetupActors; i++) {
+                Actor* spawnedActor = Actor_SpawnEntry(&play->actorCtx, actorEntry++, play);
+                // #region SOH [ObjectExtension] ActorListIndex tracking
+                SetActorListIndex(spawnedActor, (s16)i);
+                // #endregion
+            }
+            play->numSetupActors = 0;
+            GameInteractor_ExecuteOnSceneSpawnActors();
         }
-        play->numSetupActors = 0;
-        GameInteractor_ExecuteOnSceneSpawnActors();
     }
 
     if (actorCtx->unk_02 != 0) {
@@ -2633,18 +2638,21 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
 
             actor->sfx = 0;
 
-            if (actor->init != NULL) {
-                if (Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
-                    Actor_SetObjectDependency(play, actor);
+            if (actor->init != NULL)
+            {
+                if (!GameInteractor_ShouldActorDelayInit(actor)) {
+                    if (Object_IsLoaded(&play->objectCtx, actor->objBankIndex)) {
+                        Actor_SetObjectDependency(play, actor);
 
-                    if (GameInteractor_ShouldActorInit(actor)) {
-                        actor->init(actor, play);
-                        actor->init = NULL;
+                        if (GameInteractor_ShouldActorInit(actor)) {
+                            actor->init(actor, play);
+                            actor->init = NULL;
 
-                        GameInteractor_ExecuteOnActorInit(actor);
-                    } else {
-                        actor->init = NULL;
-                        Actor_Kill(actor);
+                            GameInteractor_ExecuteOnActorInit(actor);
+                        } else {
+                            actor->init = NULL;
+                            Actor_Kill(actor);
+                        }
                     }
                 }
                 actor = actor->next;

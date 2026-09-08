@@ -52,6 +52,10 @@ static u8 sBgPoEventPuzzleState = 1;
 static f32 sStatueDistToPlayer = 0;
 
 static s16 sStatueRotY;
+s16* gBgHakaGateSkullOfTruthRotY = &sSkullOfTruthRotY;
+u8* gBgHakaGatePuzzleState = &sBgPoEventPuzzleState;
+s16* gBgHakaGateStatueRotY = &sStatueRotY;
+f32* gBgHakaGateStatueDistToPlayer = &sStatueDistToPlayer;
 
 const ActorInit Bg_Haka_Gate_InitVars = {
     ACTOR_BG_HAKA_GATE,

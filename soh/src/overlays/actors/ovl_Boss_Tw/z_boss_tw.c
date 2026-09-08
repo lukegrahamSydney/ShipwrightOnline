@@ -5470,3 +5470,32 @@ void BossTw_Reset(void) {
     sTwInitalized = false;
     memset(sTwEffects, 0, sizeof(sTwEffects));
 }
+
+//ZO
+BossTw** gBossTwKotake = &sKotakePtr;
+BossTw** gBossTwKoume = &sKoumePtr;
+BossTw** gBossTwTwinrova = &sTwinrovaPtr;
+u8* gBossTwShieldFireCharge = &sShieldFireCharge;
+u8* gBossTwShieldIceCharge = &sShieldIceCharge;
+u8* gBossTwFreezeState = &sFreezeState;
+u8* gBossTwBlastType = &sTwinrovaBlastType;
+u8* gBossTwGroundBlastType = &sGroundBlastType;
+u8* gBossTwBeamDivertTimer = &sBeamDivertTimer;
+ColliderCylinderInit* gBossTwCylBlasts = &sCylinderInitBlasts;
+ColliderCylinderInit* gBossTwCylKoumeKotake = &sCylinderInitKoumeKotake;
+ColliderCylinderInit* gBossTwCylTwinrova = &sCylinderInitTwinrova;
+u8* gBossTwInitalized = &sTwInitalized;
+s8* gBossTwEnvType = &sEnvType;
+u8* gBossTwFixedBlastType = &sFixedBlastType;
+u8* gBossTwFixedBlatSeq = &sFixedBlatSeq;
+f32* gBossTwD854 = &D_8094C854;
+f32* gBossTwD858 = &D_8094C858;
+u8* gBossTwD86F = &D_8094C86F;
+u8* gBossTwD870 = &D_8094C870;
+s16* gBossTwD872 = &D_8094C872;
+s16* gBossTwD874 = &D_8094C874;
+s16* gBossTwD876 = &D_8094C876;
+u8* gBossTwD878 = &D_8094C878;
+s16* gBossTwD87A = &D_8094C87A;
+s16* gBossTwD87C = &D_8094C87C;
+u8* gBossTwD87E = &D_8094C87E;

@@ -76,6 +76,7 @@ void BgVbSima_Update(Actor* thisx, PlayState* play) {
     f32 minus1 = -1.0f;
 
     this->shakeTimer++;
+
     if (!Flags_GetClear(play, play->roomCtx.curRoom.num)) {
         s32 signal = bossFd->platformSignal;
 

@@ -683,3 +683,5 @@ extern "C" void ResourceMgr_ClearSkeletons() {
 extern "C" s32* ResourceMgr_LoadCSByName(const char* path) {
     return (s32*)ResourceMgr_GetResourceDataByNameHandlingMQ(path);
 }
+
+

@@ -7,17 +7,25 @@
 
 #define ZO_HORSE_PUPPET 0x4000
 
-#include "global.h"
 #ifdef __cplusplus
 #include <unordered_set>
+#include <unordered_map>
 #include "ZNetworking.hpp"
 #include "ByteStream.hpp"
 #include "BytePacking.hpp"
 #include "PacketTypes.hpp"
 #include "AbstractActorController.hpp"
+#include "ResourceDownloader.hpp"
 #include <ctime>
+#include "Guid.hpp"
+#include "ZeldaOnlineRoomWindow.hpp"
+
+
 
 namespace ZeldaOnline {
+
+    
+std::vector<std::string> MissingArchives(const std::vector<std::string>& archiveNames);
 
 class ZeldaOnlineClient : public ZNetworking {
   private:
@@ -31,7 +39,9 @@ class ZeldaOnlineClient : public ZNetworking {
     } ;
     std::string m_host;
     int m_port = 21050;
+    std::string m_nickName = "Player";
 
+    uint64_t m_clientGUID = NewGuid();
     ByteStream recvBuffer;
 
     std::unordered_map<int, AbstractActorController*> m_networkedActors;
@@ -44,45 +54,63 @@ class ZeldaOnlineClient : public ZNetworking {
     u8 m_boundaryCueOnLoad = 0;
     bool m_sceneLoadedAtNight = false;
     bool m_reloadPending = false;
-    u8 m_wasPaused = 0;
+    u8 m_wasSimulationPaused = 0;
 
     int m_lastScene = -1;
     int m_lastRoom = -1;
+    int m_removeNametagTimer = 0;
+    int m_clearPlayerListStatusTimer = 0;
 
     u32 m_nextLocalID = 1;
-    std::unordered_set<int> m_lockedDoorFlags;
 
     ByteStream m_lastAppearanceBlob;
 
-    bool m_spawningPuppetPlayer = false;
-    u8 m_lastSentLinkAge = 0xFF;
 
     bool m_applyingRemoteSpawn = false;
-    int m_partyID = 0;
-    uint32_t m_currentRoomTempMask = 0;
+    uint32_t m_partyID = 0U;
+
 
     bool m_sendFullPlayerProps = true;
     ByteStream m_lastPlayerProps;
-    u32 m_currentFrame = 0;
     bool m_hooksEnabled = false;
     std::unordered_set<int> m_blockedParentSpawners;
     bool m_didDisconnect = false;
+    bool m_autoReconnect = true;
+    bool m_wasConnected = false;
+
     uint64_t m_bytesSent = 0;
     uint64_t m_bytesReceived = 0;
     time_t m_lastReportTime = 0;
+    int m_showConnectionStatusTimer = 0;
+
+    std::string m_skinRef = "";
+    std::string m_skinName = "";
+    
+    uint32_t m_sceneLockedDoorFlags = 0U;  
+    uint32_t m_savedSwch = 0U;              //We save the current scenes flags in OnSceneInit so we can reapply the locked doors
+    int m_blockSceneSetupActors = -1;
+    int m_keepAliveTimer = 20 * 3;
+
+    ResourceDownloader m_downloader;
+    std::string m_fileServerUrl;
+
+    std::unordered_map<unsigned int, uint64_t> m_dungeonSessions;
+
     RequestRoomSceneChange m_roomSceneChange = RequestRoomSceneChange::RequestRoomSceneChangeNone;
 
     void ReportBandwidth();
     bool NextPacket(ByteStream& out);
     void SendPacket_PlayerUpdate();
+    void DrawOverlay(GraphicsContext* gfxCtx);
+
     void UpdateAppearance();
     void RegisterNetworkingHook(bool enabled);
     void RegisterHooks(bool enabled);
     void OnActorKill(Actor* actor);
     void OnGameFrameUpdate();
     void InitPuppetPlayer(Actor* actor);
-
-    void GetTunicColours(Player* player, Color_RGB8* out);
+    void OnSceneInited(int sceneNum);
+    void NetworkHook();
 
   public:
     static ZeldaOnlineClient* Instance;
@@ -94,29 +122,91 @@ class ZeldaOnlineClient : public ZNetworking {
         ZNetworking::Disable();
     }
 
+
+    static bool SplitSkinRef(const std::string& ref, std::string& resourceName,
+                             std::vector<std::string>& archiveNames) {
+        size_t bar = ref.find('|');
+
+        resourceName = (bar == std::string::npos) ? ref : ref.substr(0, bar);
+        if (resourceName.empty()) {
+            return true;
+        }
+
+        if (resourceName == "link") {
+            resourceName = "";
+            return true;
+        }
+
+        if (bar == std::string::npos) {
+            archiveNames.push_back(resourceName + ".o2r");
+            return true;
+        }
+
+        std::string archives = ref.substr(bar + 1);
+        size_t start = 0;
+
+        while (start <= archives.size()) {
+            size_t comma = archives.find(',', start);
+            std::string one = archives.substr(start, comma - start);
+            if (!one.empty()) {
+                archiveNames.push_back(one);
+            }
+            if (comma == std::string::npos) {
+                break;
+            }
+            start = comma + 1;
+        }
+
+        return !archiveNames.empty();
+    }
+
     static bool IsNightTime(u16 dayTime) {
         return dayTime > 0xC000 || dayTime < 0x4555;
     }
 
-    static bool IsDayNightReloadScene(int sceneNum) {
+	static bool IsDayNightReloadScene(int sceneNum, int sceneVariant) {
         switch (sceneNum) {
-            case 0x1B:
-            case 0x1C:
-            case 0x20:
-            case 0x21:
-            case 0x22:
-            case 0x23:
-            case 0x52:
-            case 0x63:
+            case 0x1B: // Market entrance (day)
+            case 0x1C: // Market entrance (night)
+            case 0x20: // Market (day)
+            case 0x21: // Market (night)
+            case 0x22: // Back alley (day)
+            case 0x23: // Back alley (night)
+            case 0x52: // Kakariko Village
+            case 0x53: // Graveyard
                 return true;
+
+            case 0x63:  // Lon Lon Ranch - normal (no race, no trapped inside the ranch)
+                if (sceneVariant == 0)
+                    return true;
+                break;
+
+            default:
+                return false;
+        }
+        return false;
+    }
+
+   static bool ShouldFreezeTime(int sceneNum, int sceneVariant) {
+        switch (sceneNum) {
+            case SCENE_LON_LON_RANCH:
+                return sceneVariant != 0;
+
             default:
                 return false;
         }
     }
 
+
+    int MyNetworkID() const {
+        return m_myNetworkID;
+    }
     void OnIncomingData(const char* payload, int length) override;
 
     void ProcessOutgoingPackets() override;
+
+    void Connect();
+    void Disconnect();
 
     void OnConnected() override;
     void OnDisconnected() override;
@@ -125,18 +215,21 @@ class ZeldaOnlineClient : public ZNetworking {
     virtual void OnIncomingPacket(ByteStream& packet);
 
     void RemoveNetworkedActor(int networkID, AbstractActorController* expected) {
-        for (auto it = m_networkedActors.begin(); it != m_networkedActors.end();) {
-            if (it->second == expected)
-                it = m_networkedActors.erase(it);
-            else
-                ++it;
-        }
+        auto it = m_networkedActors.find(networkID);
+        if (it != m_networkedActors.end() && it->second == expected)
+            m_networkedActors.erase(it);
     }
 
     AbstractActorController* GetNetworkController(int networkID) {
         auto it = m_networkedActors.find(networkID);
         return it == m_networkedActors.end() ? nullptr : it->second;
     }
+
+    std::unordered_map<int, AbstractActorController*>& NetworkedActors() {
+        return m_networkedActors;
+    }
+
+    void RequestSkinDownload(const std::vector<std::string>& archiveNames, const std::string& skinName);
 
     bool WritePacket(const ByteStream& data);
     void SendSceneTrigger(const std::string& name, const ByteStream& payload);
@@ -146,11 +239,13 @@ class ZeldaOnlineClient : public ZNetworking {
     Actor* RequestSpawnActorAsChild(AbstractActorController* parent, s16 actorId, f32 posX, f32 posY, f32 posZ,
                                     s16 rotX, s16 rotY, s16 rotZ, s16 params);
 
+    Actor* SpawnWarpOrHeart(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params);
     Actor* SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params);
     Actor* SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                              s16 params);
     bool RequestRoomSceneChange(bool roomTransition = false);
     Actor* FindExistingActor(s16 actorId, s16 params, int category, f32 homeX, f32 homeZ);
+
 
     bool IsLocalPlayerClosestTo(const Vec3f& pos, f32 localDistSq) {
         for (auto& entry : m_networkedActors) {
@@ -166,17 +261,17 @@ class ZeldaOnlineClient : public ZNetworking {
 
     void RegisterActorHooks(bool enabled);
     void OnSceneTrigger(AbstractActorController* sendingPlayer, const std::string& name, ByteStream& data);
-    void SendActorDied(int actorID);
+    void SendActorDied(int networkID);
 
     void TransmitActorSound(int networkID, u16 sfxId);
 
-    u32 CurrentFrame() const {
-        return m_currentFrame;
-    }
 
     void SendDeclineActorLeader(int networkID);
 
     void DetachAndKill(AbstractActorController* controller);
+    const std::string& LocalSkinName() const {
+        return m_skinName;
+    }
 };
 }
 
@@ -193,6 +288,7 @@ Actor* ZeldaOnlineClient_SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX,
                                            s16 rotZ, s16 params);
 
 int ZeldaOnlineClient_RequestRoomSceneChange(int freshLoad);
+const char* ZeldaOnline_LocalSkinName();
 extern u8 gZeldaOnlineEngineCleanup;
 
 #ifdef __cplusplus

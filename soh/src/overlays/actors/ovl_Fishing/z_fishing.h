@@ -59,6 +59,8 @@ typedef struct Fishing {
     /* 0x0250 */ ColliderJntSphElement colliderElements[12];
 } Fishing; // size = 0x0550
 
+
+
 #define EN_FISH_OWNER 1      // param for owner of pond. default if params<100
 #define EN_FISH_PARAM 100    // param base for fish in pond.
 #define EN_FISH_AQUARIUM 200 // param for record fish in tank.
@@ -71,5 +73,12 @@ struct VBFishingData {
     f32 fishWeight;
     f32 sFishingRecordLength;
 };
+
+typedef struct {
+    /* 0x00 */ u8 isLoach;
+    /* 0x02 */ Vec3s pos;
+    /* 0x08 */ u8 baseLength;
+    /* 0x0C */ f32 perception;
+} FishingFishInit; // size = 0x10
 
 #endif

@@ -200,7 +200,7 @@ class CuccoController : public AbstractActorController {
         UpdateAnimation(&niw->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -212,14 +212,14 @@ class CuccoController : public AbstractActorController {
         niw->unk_2FC = 0.0f;
         niw->unk_300 = 0.0f;
 
-        if (niw->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+        if (niw->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
         if (!IsRampaging() && niw->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (Math3D_Vec3fDistSq(&niw->unk_2AC, &niw->actor.world.pos) > (500.0f * 500.0f)) {
             niw->unk_2AC = niw->actor.world.pos;

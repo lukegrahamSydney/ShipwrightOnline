@@ -150,7 +150,7 @@ class ShopScrubController : public AbstractActorController {
         EnDns* dns = Typed();
 
         if (dns->actor.xzDistToPlayer < CLAIM_RANGE && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         dns->dustTimer++;
         Actor_SetFocus(&dns->actor, 60.0f);
@@ -171,8 +171,7 @@ class ShopScrubController : public AbstractActorController {
         }
 
         if (dns->maintainCollider) {
-            Collider_UpdateCylinder(&dns->actor, &dns->collider);
-            RegisterColliderBase(play, &dns->collider.base, COLL_OC);
+            RegisterCylinder(play, &dns->collider, COLL_OC);
         }
     }
 

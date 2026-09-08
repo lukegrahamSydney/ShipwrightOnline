@@ -1594,7 +1594,9 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         Anchor::Instance->Enable();
     }
 
-    ZeldaOnline::ZeldaOnlineClient::Instance->Enable();
+    if (CVarGetInteger("gZeldaOnline.Enabled", 0)) {
+        ZeldaOnline::ZeldaOnlineClient::Instance->Enable();
+    }
 
     ShipInit::InitAll();
     Rando::StaticData::InitHashMaps();

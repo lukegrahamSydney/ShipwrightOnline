@@ -7,11 +7,11 @@ become leader if the body is leader. So all the parts are always controlled by a
 */
 #include <cstring>
 #include <string>
-#include "../AbstractActorController.hpp"
+#include "../AbstractBossController.hpp"
 
 extern "C" {
 #include "src/overlays/actors/ovl_Boss_Va/z_boss_va.h"
-
+#include "assets/textures/boss_title_cards/object_bv.h"
 typedef struct BossVaEffect {
     /* 0x00 */ Vec3f pos;
     /* 0x0C */ Vec3f velocity;
@@ -78,6 +78,11 @@ extern u8 sBodyBari[10];
 extern BossVaEffect sVaEffects[400];
 
 extern s16 sCsCamera;
+extern Vec3f sCameraEye;
+extern Vec3f sCameraAt;
+
+void func_80064534(PlayState* play, CutsceneContext* csCtx);
+u16 func_800FA0B4(u8 seqPlayerIndex);
 }
 
 namespace ZeldaOnline {
@@ -94,9 +99,9 @@ typedef enum {
 static constexpr s8 BOSSVA_CS_BATTLE = 13;
 static constexpr s8 BOSSVA_CS_DEATH_START = 14;
 
-class BarinadeController : public AbstractActorController {
+class BarinadeController : public AbstractBossController {
   public:
-    using AbstractActorController::AbstractActorController;
+    using AbstractBossController::AbstractBossController;
 
     BossVa* Typed() const {
         return reinterpret_cast<BossVa*>(m_actor);
@@ -129,6 +134,31 @@ class BarinadeController : public AbstractActorController {
     static constexpr u8 ID_BARI_PHASE2 = 18;
     static constexpr u8 ID_BARI_PHASE3 = 19;
     static constexpr u8 ID_BARI_STUNNED = 20;
+
+    
+    const char* GetTitleCard() const override {
+        return gBarinadeTitleCardENGTex;
+    }
+
+    int16_t* GetCameraSubID() override {
+        return &sCsCamera;
+    }
+
+    Vec3f_* GetCameraAt() override {
+        return &sCameraAt;
+    }
+
+    Vec3f_* GetCameraEye() override {
+        return &sCameraEye;
+    }
+
+    void OnActorInit() override {
+        if (IsBody() && !IsLeader())
+            EndCutsceneCamera();
+
+        if (Flags_GetClear(gPlayState, gPlayState->roomCtx.curRoom.num))
+            Actor_Kill(m_actor);
+    }
 
     bool IsBody() const {
         return Typed()->actor.params == BOSSVA_BODY;
@@ -308,7 +338,7 @@ class BarinadeController : public AbstractActorController {
     }
 
     enum {
-        PROP_ACTION = PROP_CUSTOM_START,
+        PROP_ACTION = PROP_BOSS_END,
         PROP_DAMAGE,
         PROP_TIMERS,
         PROP_GLOW,
@@ -386,6 +416,11 @@ class BarinadeController : public AbstractActorController {
             for (int i = 0; i < 10; i++)
                 fight << PackedUInt1(sBodyBari[i]);
             PackProperty(PROP_FIGHT_STATE, fight, out);
+
+            BuildBossProperty(PROP_BOSS_CAMERA, out);
+            BuildBossProperty(PROP_BOSS_BGM, out);
+            BuildBossProperty(PROP_BOSS_TITLE_CARD, out);
+            BuildBossProperty(PROP_BOSS_LIGHTING, out);
         }
 
         BuildStandardExtendedProperty(PROP_VELOCITY, out);
@@ -484,6 +519,7 @@ class BarinadeController : public AbstractActorController {
                 ApplyAnimProperty((void*)anim, &va->skelAnime, LOCK_CUR_FRAME ? va->skelAnime.curFrame : 0.0f, data);
                 break;
             }
+            
             case PROP_FIGHT_STATE:
                 sBodyState = (u8)(data.Read<PackedUInt1>().value());
                 sFightPhase = (u8)(data.Read<PackedUInt1>().value());
@@ -496,16 +532,17 @@ class BarinadeController : public AbstractActorController {
                 for (int i = 0; i < 10; i++)
                     sBodyBari[i] = (u8)(data.Read<PackedUInt1>().value());
                 break;
+
             default:
-                return false;
+                return ApplyBossProperty(index, data, propLen);
         }
         return true;
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (Typed()->actionFunc == BossVa_BodyDeath && !IsRunningLocally()) {
+        if (Typed()->actionFunc == BossVa_BodyDeath) {
             BossVa* va = Typed();
-
+            EndCutsceneCamera();
             va->isDead = 0;
             va->burst = 0;
             sCsState = 13;
@@ -522,22 +559,39 @@ class BarinadeController : public AbstractActorController {
         va->colliderSph.base.ac = &GET_PLAYER(gPlayState)->actor;
     }
 
-    void OnBecomeLeader() override {
-        if (gPlayState == nullptr || sCsState >= BOSSVA_CS_BATTLE) {
-            return;
-        }
 
-        if (sCsCamera == SUBCAM_FREE) {
-            sCsCamera = Play_CreateSubCamera(gPlayState);
-        }
+    void UpdateLeader(PlayState* play) override {
+        BossVa* va = Typed();
+
+        AbstractActorController::UpdateLeader(play);
+
+        if (va->actionFunc == BossVa_BodyDeath && !Flags_GetClear(play, play->roomCtx.curRoom.num))
+            Flags_SetClear(play, play->roomCtx.curRoom.num);
+
+        m_bodyRoles = 0;
+        if (va->colliderBody.base.atFlags & AT_ON)
+            m_bodyRoles |= COLL_AT;
+        if (va->colliderBody.base.acFlags & AC_ON)
+            m_bodyRoles |= COLL_AC;
+        if (va->colliderBody.base.ocFlags1 & OC1_ON)
+            m_bodyRoles |= COLL_OC;
+
+        m_sphRoles = 0;
+        if (va->colliderSph.base.atFlags & AT_ON)
+            m_sphRoles |= COLL_AT;
+        if (va->colliderSph.base.acFlags & AC_ON)
+            m_sphRoles |= COLL_AC;
+        if (va->colliderSph.base.ocFlags1 & OC1_ON)
+            m_sphRoles |= COLL_OC;
+
+        m_lightningRoles = (va->colliderLightning.base.atFlags & AT_ON) ? COLL_AT : 0;
     }
+
 
     void UpdatePuppet(PlayState* play) override {
         BossVa* va = Typed();
 
-        //If this is not the main body
-        //Then check if the main body is the leader
-        //If yes, then we must also become leader
+
         if (!IsBody()) {
             Actor* bodyActor = va->actor.parent;
             if (bodyActor != nullptr && bodyActor->zoController != nullptr) {
@@ -545,20 +599,19 @@ class BarinadeController : public AbstractActorController {
 
                 if (bodyCtl->IsRunningLocally()) {
                     GoLocal();
-                    m_originalUpdate(&va->actor, play);
+                    UpdateLeader(play);
                     return;
                 }
 
                 if (bodyCtl->IsLeader() && !IsIntroPlaying()) {
-                    ClaimLeadership(CLAIM_REASON_HIT);
+                    ClaimLeadership(CLAIM_REASON_NOW);
                     UpdateLeader(play);
                     return;
                 }
             }
         }
 
-        //When you cut its supports it doesnt just change animation, the whole skeleton
-        //is swapped.
+
         if (IsSupport() && !va->onCeiling && !m_supportSkelSwapped) {
             m_supportSkelSwapped = true;
             SkelAnime_Free(&va->skelAnime, play);
@@ -568,7 +621,7 @@ class BarinadeController : public AbstractActorController {
 
         if (HitWouldReact() && !IsIntroPlaying()) {
             if (IsBody()) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 ClearHitFlags();
                 return;
@@ -676,29 +729,7 @@ class BarinadeController : public AbstractActorController {
         }
     }
 
-    void UpdateLeader(PlayState* play) override {
-        BossVa* va = Typed();
-
-        AbstractActorController::UpdateLeader(play);
-
-        m_bodyRoles = 0;
-        if (va->colliderBody.base.atFlags & AT_ON)
-            m_bodyRoles |= COLL_AT;
-        if (va->colliderBody.base.acFlags & AC_ON)
-            m_bodyRoles |= COLL_AC;
-        if (va->colliderBody.base.ocFlags1 & OC1_ON)
-            m_bodyRoles |= COLL_OC;
-
-        m_sphRoles = 0;
-        if (va->colliderSph.base.atFlags & AT_ON)
-            m_sphRoles |= COLL_AT;
-        if (va->colliderSph.base.acFlags & AC_ON)
-            m_sphRoles |= COLL_AC;
-        if (va->colliderSph.base.ocFlags1 & OC1_ON)
-            m_sphRoles |= COLL_OC;
-
-        m_lightningRoles = (va->colliderLightning.base.atFlags & AT_ON) ? COLL_AT : 0;
-    }
+    
 
   private:
     u8 m_currentActionIndex = ID_UNKNOWN;
@@ -712,6 +743,6 @@ class BarinadeController : public AbstractActorController {
     bool m_supportSkelSwapped = false;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

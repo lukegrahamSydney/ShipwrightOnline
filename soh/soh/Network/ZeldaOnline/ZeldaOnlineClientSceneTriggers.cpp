@@ -13,6 +13,7 @@ extern "C" {
  #include "src/overlays/actors/ovl_Bg_Dodoago/z_bg_dodoago.h"
 #include "src/overlays/actors/ovl_Bg_Spot02_Objects/z_bg_spot02_objects.h"
 
+
 extern PlayState* gPlayState;
 extern SaveContext gSaveContext;
 extern s32 sLitTorchCount;
@@ -25,6 +26,8 @@ void BgDodoago_OpenJaw(BgDodoago* self, PlayState* play);
 void BgDodoago_DoNothing(BgDodoago* self, PlayState* play);
 void EnArrow_Fly(EnArrow*, PlayState* play);
 void func_808ACA08(BgSpot02Objects* thisx, PlayState* play);
+
+
 }
 
 namespace ZeldaOnline
@@ -134,6 +137,10 @@ namespace ZeldaOnline
                 }
             }
 
+             x -= speedXZ * Math_SinS(ry);
+            y -= velY;
+            z -= speedXZ * Math_CosS(ry);
+
             m_applyingRemoteSpawn = true;
             Actor* arrowActor = Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, ACTOR_EN_ARROW, x, y, z, rx, ry, 0,
                                                   x, y, z, rx, ry, 0, params, 0);
@@ -143,29 +150,24 @@ namespace ZeldaOnline
                 arrowActor->flags |= ACTOR_FLAG_ZO_USER1;
 
                 EnArrow* arrow = reinterpret_cast<EnArrow*>(arrowActor);
+                if (params != ARROW_NUT) {
+                    arrow->actionFunc = EnArrow_Fly;
+                    Math_Vec3f_Copy(&arrow->unk_210, &arrow->actor.world.pos);
+                    arrow->actor.speedXZ = speedXZ;
+                    arrow->actor.velocity.y = velY;
+                    arrow->timer = (params >= ARROW_SEED) ? 15 : 12;
+                    if (params >= ARROW_SEED) {
+                        arrow->actor.shape.rot.x = arrow->actor.shape.rot.y = arrow->actor.shape.rot.z = 0;
+                    }
 
-                if (arrowActor != NULL) {
-                    arrowActor->flags |= ACTOR_FLAG_ZO_USER1;
-                    EnArrow* arrow = reinterpret_cast<EnArrow*>(arrowActor);
-
-                    if (params != ARROW_NUT) {
-                        arrow->actionFunc = EnArrow_Fly;
-                        Math_Vec3f_Copy(&arrow->unk_210, &arrow->actor.world.pos);
-                        arrow->actor.speedXZ = speedXZ;
-                        arrow->actor.velocity.y = velY;
-                        arrow->timer = (params >= ARROW_SEED) ? 15 : 12;
-                        if (params >= ARROW_SEED) {
-                            arrow->actor.shape.rot.x = arrow->actor.shape.rot.y = arrow->actor.shape.rot.z = 0;
-                        }
-
-                        if (true) {
-                            arrow->collider.base.atFlags =
-                                (arrow->collider.base.atFlags & ~AT_TYPE_ALL) | AT_TYPE_ENEMY;
-                        } else {
-                            arrow->collider.base.atFlags &= ~AT_ON;
-                        }
+                    if (true) {
+                        arrow->collider.base.atFlags =
+                            (arrow->collider.base.atFlags & ~AT_TYPE_ALL) | AT_TYPE_ENEMY;
+                    } else {
+                        arrow->collider.base.atFlags &= ~AT_ON;
                     }
                 }
+                
             }
         }
 
@@ -263,6 +265,7 @@ namespace ZeldaOnline
             }
 
         }
+        
 
 	}
 

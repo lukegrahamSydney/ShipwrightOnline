@@ -25,12 +25,7 @@ void Fishing_DrawFish(Actor* thisx, PlayState* play);
 void Fishing_DrawOwner(Actor* thisx, PlayState* play);
 void Fishing_Reset(void);
 
-typedef struct {
-    /* 0x00 */ u8 isLoach;
-    /* 0x02 */ Vec3s pos;
-    /* 0x08 */ u8 baseLength;
-    /* 0x0C */ f32 perception;
-} FishingFishInit; // size = 0x10
+
 
 typedef enum {
     /* 0x00 */ FS_EFF_NONE,
@@ -43,6 +38,7 @@ typedef enum {
     /* 0x07 */ FS_EFF_RAIN_RIPPLE,
     /* 0x08 */ FS_EFF_RAIN_SPLASH
 } FishingEffectType;
+
 
 #define FISHING_EFFECT_COUNT 130
 
@@ -154,7 +150,7 @@ static f32 sStormSfxFreqScale = 0.0f;
 static u8 sSinkingLureLocation = 0;
 
 /// Weight of caught fish.
-static f32 sFishOnHandLength = 0.0f;
+f32 sFishOnHandLength = 0.0f;
 
 static u8 sIsRodVisible = true;
 
@@ -176,19 +172,19 @@ static u8 sOwnerHair = FS_OWNER_BALD;
 static u8 sIsOwnersHatHooked = false; // hat is on fishing hook
 static u8 sIsOwnersHatSunk = false;   // hat is sinking into pond.
 
-static s16 sRodCastState = 0;
+s16 sRodCastState = 0;
 
 static Vec3f sFishMouthOffset = { 500.0f, 500.0f, 0.0f };
 
 static u8 D_80B7A6A4 = 0;
 
-static f32 sRodBendRotY = 0.0f;
-static f32 D_80B7A6AC = 0.0f;
+f32 sRodBendRotY = 0.0f;
+f32 D_80B7A6AC = 0.0f;
 static f32 D_80B7A6B0 = 0.0f;
 static f32 D_80B7A6B4 = 0.0f;
-static f32 D_80B7A6B8 = 0.0f;
-static f32 D_80B7A6BC = 0.0f;
-static f32 D_80B7A6C0 = 0.0f;
+f32 D_80B7A6B8 = 0.0f;
+f32 D_80B7A6BC = 0.0f;
+f32 D_80B7A6C0 = 0.0f;
 
 static s16 sStickAdjXPrev = 0;
 static s16 sStickAdjYPrev = 0;
@@ -369,20 +365,23 @@ static Vec3s sEffOwnersHatRot;
 static u8 sLureMoveDelay; // a small delay between the lure hitting the water, and being able to reel.
 static s16 sRumbleDelay;
 static s16 sFishingMusicDelay;
-static Fishing* sFishingHookedFish;
+Fishing* sFishingHookedFish;
 static s16 sFishingPlayingState;
 static s16 sLureTimer; // AND'd for various effects/checks
 static s16 D_80B7E0B0;
 static s16 D_80B7E0B2;
 static s16 sRodCastTimer; // used for the inital line casting
-static u8 sLureEquipped;
-static Vec3f sLurePos;
+u8 sLureEquipped;
+Vec3f sLurePos;
+Vec3f sLureRot;
+f32 sLure1Rotate; // lure type 1 is programmed to change this.
+f32 sLurePosZOffset;
 static Vec3f sLureDrawPos;
-static Vec3f sLureRot;
+
 static Vec3f sLurePosDelta;
 static Vec3f sLureCastDelta;
-static f32 sLure1Rotate; // lure type 1 is programmed to change this.
-static f32 sLurePosZOffset;
+
+
 static f32 sLureRotXTarget;
 static f32 sLureRotXStep;
 static s8 D_80B7E114;
@@ -399,7 +398,7 @@ static s16 sLureWiggleRotY;
 static f32 sLureWiggleSign; // +/-1.0f
 static f32 sRodLineSpooled; // 200 represents the full spool.
 static f32 D_80B7E148;
-static f32 sFishingLineScale;
+f32 sFishingLineScale;
 static s16 D_80B7E150;
 static f32 sReelLinePosStep;
 static Vec3f sRodTipPos;
@@ -831,7 +830,7 @@ void Fishing_InitPondProps(Fishing* this, PlayState* play) {
     }
 }
 
-static FishingFishInit sFishInits[] = {
+FishingFishInit sFishInits[] = {
     { 0, { 666, -45, 354 }, 38, 0.1f },    { 0, { 681, -45, 240 }, 36, 0.1f },   { 0, { 670, -45, 90 }, 41, 0.05f },
     { 0, { 615, -45, -450 }, 35, 0.2f },   { 0, { 500, -45, -420 }, 39, 0.1f },  { 0, { 420, -45, -550 }, 44, 0.05f },
     { 0, { -264, -45, -640 }, 40, 0.1f },  { 0, { -470, -45, -540 }, 34, 0.2f }, { 0, { -557, -45, -430 }, 54, 0.01f },
@@ -1981,18 +1980,18 @@ void Fishing_DrawLureAndLine(PlayState* play, Vec3f* linePos, Vec3f* lineRot) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static f32 sRodScales[22] = {
+f32 sRodScales[22] = {
     1.0f,        1.0f,        1.0f,        0.9625f,     0.925f, 0.8875f,     0.85f,       0.8125f,
     0.775f,      0.73749995f, 0.7f,        0.6625f,     0.625f, 0.5875f,     0.54999995f, 0.5125f,
     0.47499996f, 0.4375f,     0.39999998f, 0.36249995f, 0.325f, 0.28749996f,
 };
 
-static f32 sRodBendRatios[22] = {
+f32 sRodBendRatios[22] = {
     0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.06f,   0.12f,   0.18f,   0.24f,   0.30f,   0.36f,
     0.42f, 0.48f, 0.54f, 0.60f, 0.60f, 0.5142f, 0.4285f, 0.3428f, 0.2571f, 0.1714f, 0.0857f,
 };
 
-static Vec3f sRodTipOffset = { 0.0f, 0.0f, 0.0f };
+Vec3f sRodTipOffset = { 0.0f, 0.0f, 0.0f };
 
 void Fishing_DrawRod(PlayState* play) {
     s16 i;

@@ -2476,7 +2476,6 @@ void func_80838940(Player* this, LinkAnimationHeader* anim, f32 arg2, PlayState*
 
 // #endregion
 
-void Player_SetSkinPrefix(Player* self, const char* prefix);
 #ifdef __cplusplus
 #undef this
 };

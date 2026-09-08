@@ -161,7 +161,7 @@ class KeeseController : public AbstractActorController {
         UpdateAnimation(&keese->skelAnime, LOCK_CUR_FRAME);
 
         if (keese->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -170,7 +170,7 @@ class KeeseController : public AbstractActorController {
 
         if ((keese->actionFunc == EnFirefly_Perch || keese->actionFunc == EnFirefly_FlyIdle) &&
             keese->actor.xzDistToPlayer < 160.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         keese->collider.elements[0].dim.worldSphere.center.x = (int16_t)keese->actor.world.pos.x;
         keese->collider.elements[0].dim.worldSphere.center.y = (int16_t)keese->actor.world.pos.y + 10;

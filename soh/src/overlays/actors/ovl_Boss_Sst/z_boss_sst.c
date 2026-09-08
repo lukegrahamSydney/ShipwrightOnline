@@ -200,6 +200,7 @@ static BossSst* sHead;
 static BossSst* sHands[2];
 static BgSstFloor* sFloor;
 
+
 static Vec3f sRoomCenter = { ROOM_CENTER_X, ROOM_CENTER_Y, ROOM_CENTER_Z };
 static Vec3f sHandOffsets[2];
 static s16 sHandYawOffsets[2];
@@ -255,6 +256,9 @@ const ActorInit Boss_Sst_InitVars = {
     (ActorResetFunc)BossSst_Reset,
 };
 
+BossSst** gBossSstHead = &sHead;
+
+
 #include "z_boss_sst_colchk.c"
 
 static AnimationHeader* sHandIdleAnims[] = { &gBongoLeftHandIdleAnim, &gBongoRightHandIdleAnim };
@@ -272,6 +276,10 @@ static InitChainEntry sInitChain[] = {
     ICHAIN_VEC3F_DIV1000(scale, 20, ICHAIN_STOP),
 };
 
+void BossSst_SetFloor(BgSstFloor* floor) {
+    sFloor = floor;
+}
+
 void BossSst_Init(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     BossSst* this = (BossSst*)thisx;
@@ -282,8 +290,13 @@ void BossSst_Init(Actor* thisx, PlayState* play2) {
     CollisionCheck_SetInfo(&this->actor.colChkInfo, &sDamageTable, &sColChkInfoInit);
     Flags_SetSwitch(play, 0x14);
     if (this->actor.params == BONGO_HEAD) {
-        sFloor = (BgSstFloor*)Actor_Spawn(&play->actorCtx, play, ACTOR_BG_SST_FLOOR, sRoomCenter.x, sRoomCenter.y,
-                                          sRoomCenter.z, 0, 0, 0, BONGOFLOOR_REST);
+
+        BgSstFloor* floor = (BgSstFloor*)Actor_Spawn(&play->actorCtx, play, ACTOR_BG_SST_FLOOR, sRoomCenter.x,
+                                                    sRoomCenter.y, sRoomCenter.z, 0, 0, 0, BONGOFLOOR_REST);
+
+        if (floor != NULL)
+            sFloor = floor;
+
         SkelAnime_InitFlex(play, &this->skelAnime, &gBongoHeadSkel, &gBongoHeadEyeOpenIdleAnim, this->jointTable,
                            this->morphTable, 45);
         ActorShape_Init(&this->actor.shape, 70000.0f, ActorShadow_DrawCircle, 95.0f);
@@ -3302,3 +3315,17 @@ void BossSst_Reset(void) {
     sStaticColor.g = 0;
     sStaticColor.b = 0;
 }
+
+BossSst** gBossSstHands = sHands;
+s32* gBossSstHandState = sHandState;
+u32* gBossSstBodyStatic = &sBodyStatic;
+BgSstFloor** gBossSstFloor = &sFloor;
+ColliderJntSphInit* gBossSstJntSphInitHead = &sJntSphInitHead;
+ColliderJntSphInit* gBossSstJntSphInitHand = &sJntSphInitHand;
+ColliderCylinderInit* gBossSstCylinderInitHead = &sCylinderInitHead;
+ColliderCylinderInit* gBossSstCylinderInitHand = &sCylinderInitHand;
+CollisionCheckInfoInit* gBossSstColChkInfoInit = &sColChkInfoInit;
+DamageTable* gBossSstDamageTable = &sDamageTable;
+s16* gBossSstCutsceneCamera = &sCutsceneCamera;
+Vec3f* gBossSstCameraAt = &sCameraAt;
+Vec3f* gBossSstCameraEye = &sCameraEye;

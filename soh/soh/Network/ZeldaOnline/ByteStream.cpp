@@ -115,8 +115,7 @@ void ByteStream::Clear(unsigned int size) {
     free(buffer);
     buffSize = want;
     buffer = (char*)malloc(buffSize + 1);
-    if (!buffer)
-    {
+    if (!buffer) {
         buffSize = 0;
         abort();
     }
@@ -135,8 +134,17 @@ void ByteStream::Compact() {
 }
 
 void ByteStream::Grow(unsigned int additional) {
-    unsigned int newSize = writePos + additional + 50 + (count / 2);
-    char* newBuffer = (char*)realloc(buffer, newSize + 1);
+    const unsigned int limit = 0xFFFFFFFEu;
+    if (additional > limit - writePos)
+        abort();
+
+    unsigned int newSize = writePos + additional;
+    unsigned int slack = 50 + (count / 2);
+    if (slack > limit - newSize)
+        slack = limit - newSize;
+    newSize += slack;
+
+    char* newBuffer = (char*)realloc(buffer, (size_t)(newSize) + 1);
     if (!newBuffer)
         abort();
     buffer = newBuffer;

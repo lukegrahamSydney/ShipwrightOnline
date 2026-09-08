@@ -665,6 +665,12 @@ typedef struct PendingFlag {
     /* 0x00 */ s32 flagID;     // which flag to set when Player_SetPendingFlag is called
     /* 0x04 */ FlagType flagType;  // type of flag to set when Player_SetPendingFlag is called
 } PendingFlag; // size = 0x06
+
+typedef struct BunnyEarKinematics {
+    /* 0x0 */ Vec3s rot;
+    /* 0x6 */ Vec3s angVel;
+} BunnyEarKinematics; // size = 0xC
+
 // #endregion
 
 #define PLAYER_STATE1_LOADING (1 << 0) //Transitioning to a new scene
@@ -755,6 +761,7 @@ typedef void (*AfterPutAwayFunc)(struct PlayState*, struct Player*);
 #define UNK6AE_ROT_UPPER_X (1 << 6)
 #define UNK6AE_ROT_UPPER_Y (1 << 7)
 #define UNK6AE_ROT_UPPER_Z (1 << 8)
+
 
 typedef struct Player {
     /* 0x0000 */ Actor actor;
@@ -954,7 +961,7 @@ typedef struct Player {
     /*        */ u8 ivanDamageMultiplier;
     // #endregion
 
-    char skinPrefix[20];
+    struct PlayerSkin* skin;
 } Player; // size = 0xA94
 
 #endif

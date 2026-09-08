@@ -73,9 +73,8 @@ class PeahatController : public AbstractActorController {
         return Typed()->actor.params == PEAHAT_TYPE_FLYING;
     }
 
-    using PeahatActionFunc = void (*)(EnPeehat*, PlayState*);
-    static const PeahatActionFunc* ActionTable(size_t* count) {
-        static const PeahatActionFunc sTable[] = {
+    static const EnPeehatActionFunc* ActionTable(size_t* count) {
+        static const EnPeehatActionFunc sTable[] = {
             EnPeehat_Ground_StateGround,
             EnPeehat_Ground_StateRise,
             EnPeehat_Ground_StateSeekPlayer,
@@ -98,7 +97,7 @@ class PeahatController : public AbstractActorController {
 
     u8 CurrentActionIndex() const {
         size_t count;
-        const PeahatActionFunc* table = ActionTable(&count);
+        const EnPeehatActionFunc* table = ActionTable(&count);
         for (size_t i = 0; i < count; i++)
             if (table[i] == Typed()->actionFunc)
                 return (u8)(i);
@@ -194,7 +193,7 @@ class PeahatController : public AbstractActorController {
                 u8 id = (u8)(data.Read<PackedUInt1>().value());
                 m_currentActionIndex = id;
                 size_t count;
-                const PeahatActionFunc* table = ActionTable(&count);
+                const EnPeehatActionFunc* table = ActionTable(&count);
                 if (id < count)
                     ph->actionFunc = table[id];
                 break;
@@ -245,7 +244,7 @@ class PeahatController : public AbstractActorController {
         UpdateAnimation(&ph->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -256,7 +255,7 @@ class PeahatController : public AbstractActorController {
 
         if (m_currentActionIndex != ID_DIE && m_currentActionIndex != ID_EXPLODE &&
             ph->actor.xzDistToPlayer < ph->xzDistToRise && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         ph->jiggleRot += ph->jiggleRotInc;
 

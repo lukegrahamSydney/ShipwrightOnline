@@ -19,6 +19,8 @@ void NameTag_RegisterHooks();
 extern "C" {
 #endif
 
+//Change colour of existing name tag
+void NameTag_ChangeActorTextColour(Actor* actor, const Color_RGBA8* textColour);
 // Registers a name tag to an actor with additional options applied
 void NameTag_RegisterForActorWithOptions(Actor* actor, const char* text, NameTagOptions options);
 // Registers a name tag to an actor. Multiple name tags can exist for the same actor

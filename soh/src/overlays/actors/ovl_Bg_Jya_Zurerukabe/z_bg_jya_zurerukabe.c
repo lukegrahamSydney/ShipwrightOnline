@@ -187,3 +187,6 @@ void BgJyaZurerukabe_Update(Actor* thisx, PlayState* play) {
 void BgJyaZurerukabe_Draw(Actor* thisx, PlayState* play) {
     Gfx_DrawDListOpa(play, gZurerukabeDL);
 }
+
+f32* gBgJyaZurerukabeSpeeds = D_8089B9C0;
+f32* gBgJyaZurerukabeStepRates = D_8089BA08;

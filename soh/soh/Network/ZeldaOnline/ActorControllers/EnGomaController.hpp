@@ -236,7 +236,7 @@ class EnGomaController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (Typed()->actionFunc == EnGoma_Die && !IsRunningLocally())
+        if (Typed()->actionFunc == EnGoma_Die)
             GoLocal();
     }
 
@@ -250,15 +250,15 @@ class EnGomaController : public AbstractActorController {
         }
 
         if ((goma->colCyl1.base.acFlags & AC_HIT) || (goma->colCyl2.base.acFlags & AC_HIT)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         u8 action = CurrentActionIndex();
         bool engaged = action >= 3 && action <= 7;
         if (engaged && goma->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         RegisterCylinder(play, &goma->colCyl1, Cyl1Roles());
         RegisterCylinder(play, &goma->colCyl2, Cyl2Roles());

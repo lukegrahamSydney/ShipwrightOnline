@@ -191,7 +191,7 @@ class BdanObjectsController : public AbstractActorController {
         else if (bd->dyna.actor.params != 0) {
             if (bd->actionFunc != BgBdanObjects_DoNothing && bd->dyna.actor.xzDistToPlayer < 400.0f &&
                 IsLocalPlayerClosest())
-                ClaimLeadership(CLAIM_REASON_PROXIMITY);
+                ClaimLeadership(CLAIM_REASON_COOLDOWN);
         }
 
         Actor_SetFocus(&bd->dyna.actor, 50.0f);

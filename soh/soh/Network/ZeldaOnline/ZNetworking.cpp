@@ -63,6 +63,7 @@ bool ZNetworking::Enable(const char* host, uint16_t port) {
 
     soxUnblockSocket(m_socket);
     soxDisableNagle(m_socket);
+    soxEnableKeepAlive(m_socket);
 
     isEnabled = true;
     isConnected = false;
@@ -93,7 +94,7 @@ void ZNetworking::Disable() {
 }
 
 void ZNetworking::Close(const std::string& reason) {
-    const bool wasUp = isEnabled || isConnected;
+    const bool wasUp = isConnected;
 
     if (m_socket != INVALID_SOCKET) {
         soxCloseSocket(m_socket);

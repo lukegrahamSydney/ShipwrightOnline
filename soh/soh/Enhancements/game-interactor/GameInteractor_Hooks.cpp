@@ -233,6 +233,10 @@ void GameInteractor_ExecuteOnPlayerProcessStick() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerProcessStick>();
 }
 
+void GameInteractor_ExecuteOnPlayPostInit(int sceneNum) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayPostInit>(sceneNum);
+}
+
 void GameInteractor_ExecuteOnPlayDestroy() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayDestroy>();
 }
@@ -243,6 +247,10 @@ void GameInteractor_ExecuteOnPlayDrawBegin() {
 
 void GameInteractor_ExecuteOnPlayDrawEnd() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayDrawEnd>();
+}
+
+void GameInteractor_ExecuteOnDrawOverlay(GraphicsContext* gfxCtx) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnDrawOverlay>(gfxCtx);
 }
 
 bool GameInteractor_Should(GIVanillaBehavior flag, u32 result, ...) {
@@ -406,3 +414,19 @@ void GameInteractor_ExecuteOnTransitionRoom() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnTransitionRoom>();
 }
 
+bool GameInteractor_ShouldLoadSetupActors() {
+    bool result = true;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::ShouldLoadSetupActors>(&result);
+    return result;
+}
+
+void GameInteractor_ExecuteOnSceneLoad(int16_t sceneNum) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSceneLoad>(sceneNum);
+}
+
+bool GameInteractor_ShouldActorDelayInit(void* actor)
+{
+    bool result = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::ShouldActorDelayInit>(actor, &result);
+    return result;
+}

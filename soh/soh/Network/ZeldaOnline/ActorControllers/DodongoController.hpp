@@ -46,9 +46,8 @@ class DodongoController : public AbstractActorController {
     static constexpr s32 STATE_STUNNED = 7;
     static constexpr s32 STATE_WALK = 8;
 
-    using DodongoActionFunc = void (*)(EnDodongo*, PlayState*);
-    static const DodongoActionFunc* ActionTable(size_t* count) {
-        static const DodongoActionFunc sTable[] = {
+    static const EnDodongoActionFunc* ActionTable(size_t* count) {
+        static const EnDodongoActionFunc sTable[] = {
             EnDodongo_Idle,
             EnDodongo_Walk,
             EnDodongo_BreatheFire,
@@ -64,7 +63,7 @@ class DodongoController : public AbstractActorController {
 
     u8 CurrentActionIndex() const {
         size_t count;
-        const DodongoActionFunc* table = ActionTable(&count);
+        const EnDodongoActionFunc* table = ActionTable(&count);
         for (size_t i = 0; i < count; i++)
             if (table[i] == Typed()->actionFunc)
                 return (u8)(i);
@@ -222,7 +221,7 @@ class DodongoController : public AbstractActorController {
                 u8 id = (u8)(data.Read<PackedUInt1>().value());
                 m_currentActionIndex = id;
                 size_t count;
-                const DodongoActionFunc* table = ActionTable(&count);
+                const EnDodongoActionFunc* table = ActionTable(&count);
                 if (id < count)
                     dd->actionFunc = table[id];
                 break;
@@ -288,8 +287,8 @@ class DodongoController : public AbstractActorController {
         UpdateAnimation(&dd->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
         dd->colliderBody.base.acFlags &= ~AC_HIT;
@@ -298,7 +297,7 @@ class DodongoController : public AbstractActorController {
 
         if (dd->actionState > STATE_DEATH && dd->actor.colChkInfo.health > 0 && dd->actor.xzDistToPlayer < 400.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         dd->actor.focus.pos.x = dd->actor.world.pos.x + Math_SinS(dd->actor.shape.rot.y) * -30.0f;
         dd->actor.focus.pos.y = dd->actor.world.pos.y + 20.0f;

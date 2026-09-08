@@ -98,6 +98,7 @@ static ColliderTrisInit sTrisInit = {
     4,
     sTrisElementsInit,
 };
+ColliderTrisInit* gBgHakaSgamiTrisInit = &sTrisInit;
 
 static ColliderCylinderInit sCylinderInit = {
     {

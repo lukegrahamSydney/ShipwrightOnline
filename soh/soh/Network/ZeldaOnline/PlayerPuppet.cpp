@@ -22,7 +22,6 @@ extern Vec3f D_808547B0;
 extern Color_RGBA8 D_808547BC;
 extern Color_RGBA8 D_808547C0;
 extern Gfx** sPlayerDListGroups[];
-PlayerPuppetSpawnContext gZeldaOnlinePuppetSpawn = { 0, 0, { 0 } };
 }
 
 namespace ZeldaOnline {
@@ -38,8 +37,9 @@ static PlayerPuppetState* PuppetState(Actor* actor) {
 
 void PlayerPuppet_Init(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
+    PlayerPuppetController* controller = reinterpret_cast<PlayerPuppetController*>(actor->zoController);
 
-    u8 linkAge = gZeldaOnlinePuppetSpawn.linkAge;
+    u8 linkAge = controller->LinkAge();
 
     s32 originalAge = gSaveContext.linkAge;
     gSaveContext.linkAge = linkAge;
@@ -67,10 +67,6 @@ void PlayerPuppet_Init(Actor* actor, PlayState* play) {
     player->cylinder.dim = GET_PLAYER(play)->cylinder.dim;
 
     gSaveContext.linkAge = originalAge;
-
-    if (gZeldaOnlinePuppetSpawn.name[0] != '\0') {
-        NameTag_RegisterForActorWithOptions(actor, gZeldaOnlinePuppetSpawn.name, {});
-    }
 }
 
 static void Puppet_Vec3sCopy(Vec3s* dest, const Vec3s* src) {

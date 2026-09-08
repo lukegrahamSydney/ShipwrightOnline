@@ -267,7 +267,7 @@ class BabyDodongoController : public AbstractActorController {
     }
 
     void OnActorInit() override {
-        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
+        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
     }
 
     void OnBecomeLeader() override {
@@ -288,7 +288,7 @@ class BabyDodongoController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (m_currentActionIndex >= ID_DEATH_FIRST && m_currentActionIndex <= ID_DEATH_LAST && !IsRunningLocally())
+        if (m_currentActionIndex >= ID_DEATH_FIRST && m_currentActionIndex <= ID_DEATH_LAST)
             GoLocal();
     }
 
@@ -298,8 +298,8 @@ class BabyDodongoController : public AbstractActorController {
         UpdateAnimation(&d->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
         d->collider.base.acFlags &= ~AC_HIT;
@@ -307,7 +307,7 @@ class BabyDodongoController : public AbstractActorController {
         bool active = m_currentActionIndex == ID_WAIT_UNDERGROUND || m_currentActionIndex == ID_EMERGE ||
                       m_currentActionIndex == ID_CRAWL || m_currentActionIndex == ID_JUMP_ATTACK;
         if (active && d->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         Actor_SetFocus(&d->actor, 10.0f);
 

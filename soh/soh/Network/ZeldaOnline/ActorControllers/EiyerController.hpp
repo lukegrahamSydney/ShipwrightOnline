@@ -240,7 +240,7 @@ class EiyerController : public AbstractActorController {
         UpdateAnimation(&ei->skelanime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -249,7 +249,7 @@ class EiyerController : public AbstractActorController {
 
         if (ei->actionFunc != EnEiyer_Die && ei->actionFunc != EnEiyer_Dead && ei->actor.xzDistToPlayer < 300.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         {
             Vec3f rayOrigin = ei->actor.world.pos;

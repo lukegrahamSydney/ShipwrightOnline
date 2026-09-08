@@ -1,23 +1,32 @@
 #include "ZeldaOnlineClient.hpp"
+#include <ship/window/Window.h>
+#include <ship/Context.h>
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Notification/Notification.h"
 #include "soh/frame_interpolation.h"
+#include "soh/OTRGlobals.h"
+#include <soh/SohGui/ImGuiUtils.h>
+#include <soh/Enhancements/item-tables/ItemTableManager.h>
+#include "ship/resource/ResourceManager.h"
 #include "Packet.hpp"
 #include "PacketTypes.hpp"
 #include "ActorControllerFactory.hpp"
 #include "ActorControllers/PlayerPuppetController.hpp"
 #include "z64actor_enum.h"
-#include "soh/OTRGlobals.h"
 #include "soh/Enhancements/nametag.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
-#include "src/overlays/actors/ovl_En_Horse/z_en_horse.h"
 #include <spdlog/spdlog.h>
 #include <cstring>
 #include <cstdio>
 #include "HorsePuppet.hpp"
 #include "assets/objects/gameplay_keep/gameplay_keep.h"
+#include <soh/Extractor/Extract.h>
 
+#include <soh/ActorDB.h>
+#include "soh/Enhancements/PlayerSkin/PlayerSkin.h"
+#include <ship/utils/StringHelper.h>
 #ifdef _WIN32
 static void DbgPrintf(const char* fmt, ...) {
     char buf[1024];
@@ -29,12 +38,17 @@ static void DbgPrintf(const char* fmt, ...) {
 }
 #endif
 
+
 extern "C" {
 #include "variables.h"
-#include "functions.h"
 #include "z64.h"
+#include "functions.h"
+#include "src/overlays/actors/ovl_Obj_Switch/z_obj_switch.h"
+#include "src/overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "src/overlays/actors/ovl_En_Door/z_en_door.h"
-extern f32 D_80130F28;
+#include "src/overlays/actors/ovl_En_Box/z_en_box.h"
+
+ extern f32 D_80130F28;
 extern PlayState* gPlayState;
 extern SaveContext gSaveContext;
 extern MapData* gMapData;
@@ -42,9 +56,66 @@ extern int gMapLoading;
 u8 gZeldaOnlineEngineCleanup = 0;
 float OTRGetDimensionFromLeftEdge(float v);
 float OTRGetDimensionFromRightEdge(float v);
+float OTRGetRectDimensionFromLeftEdge(float v);
 
-void FrameInterpolation_RecordOpenChild(const void* a, int b);
-void FrameInterpolation_RecordCloseChild(void);
+void Player_ReapplySkeleton(Player* thisx, PlayState* play);
+GetItemEntry ItemTable_Retrieve(int16_t getItemID);
+}
+
+static void Messagebox_ShowErrorBox(const char* title, const char* body) {
+    Extractor::ShowErrorBox(title, body);
+}
+
+static void DrawScreenText(GraphicsContext* gfxCtx, const char* text, s16 x, s16 y, Color_RGBA8 color, f32 scale) {
+    if (text == nullptr || scale <= 0.0f) {
+        return;
+    }
+
+    std::string processed = text;
+    processed.erase(std::remove_if(processed.begin(), processed.end(),
+                                   [](const char& c) { return (uint8_t)c > 172 || (c < ' ' && c != '\0'); }),
+                    processed.end());
+
+    if (processed.empty()) {
+        return;
+    }
+
+    Gfx_SetupDL_39Overlay(gfxCtx);
+
+    GraphicsContext* __gfxCtx = gfxCtx;
+
+    gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_NONE);
+    gDPSetCombineLERP(OVERLAY_DISP++, 0, 0, 0, PRIMITIVE, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0,
+                      PRIMITIVE, 0);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, color.r, color.g, color.b, color.a);
+
+    s16 dsdx = (s16)((1 << 10) / scale);
+    s16 charW = (s16)(FONT_CHAR_TEX_WIDTH * scale);
+    s16 charH = (s16)(FONT_CHAR_TEX_HEIGHT * scale);
+    s16 lineH = (s16)(16.0f * scale);
+
+    s16 originX = (s16)(OTRGetRectDimensionFromLeftEdge((f32)(x)));
+    s16 penX = originX;
+    s16 penY = y;
+
+    for (size_t i = 0; i < processed.length(); i++) {
+        if (processed[i] == '\n') {
+            penX = originX;
+            penY += lineH;
+            continue;
+        }
+
+        uintptr_t texture = (uintptr_t)Ship_GetCharFontTexture(processed[i]);
+
+        gDPLoadTextureBlock_4b(OVERLAY_DISP++, texture, G_IM_FMT_I, FONT_CHAR_TEX_WIDTH, FONT_CHAR_TEX_HEIGHT, 0,
+                               G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
+                               G_TX_NOLOD, G_TX_NOLOD);
+
+        gSPWideTextureRectangle(OVERLAY_DISP++, penX << 2, penY << 2, (penX + charW) << 2, (penY + charH) << 2,
+                                G_TX_RENDERTILE, 0, 0, dsdx, dsdx);
+
+        penX += (s16)(Ship_GetCharFontWidth(processed[i]) * scale);
+    }
 }
 
 namespace ZeldaOnline {
@@ -54,10 +125,11 @@ namespace ZeldaOnline {
 #include <cstdio>
 #endif
 
-//Some locations are using the same scene. We can make these locations unique based on some other data
-//Grttos/Fairy locations
-static int GetSceneVariant() {
-    switch (gPlayState->sceneNum) {
+
+// Some locations are using the same scene. We can make these locations unique based on some other data
+// Grttos/Fairy locations
+static int GetSceneVariant(int sceneNum) {
+    switch (sceneNum) {
         case SCENE_GROTTOS:
             return gSaveContext.respawn[RESPAWN_MODE_RETURN].data & 0xFF;
 
@@ -66,13 +138,43 @@ static int GetSceneVariant() {
         case SCENE_GREAT_FAIRYS_FOUNTAIN_SPELLS:
         case SCENE_GRAVE_WITH_FAIRYS_FOUNTAIN:
             return gSaveContext.entranceIndex & 0xFFFF;
+        case SCENE_LON_LON_RANCH: {
+            if (!Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED)) {
+                s32 ingoState = gSaveContext.eventInf[0] & 0xF;
 
+                if (ingoState == 5 || ingoState == 6)
+                    return 2;
+
+                if (ingoState == 1 || ingoState == 3 || ingoState == 4 || ingoState == 7)
+                    return 1;
+            }
+            return IS_CUTSCENE_LAYER;
+        }
         default:
-            return 0;
+            return IS_CUTSCENE_LAYER;
     }
 }
 
-//Can we call ReloadSceneInPlace? Not while paused or in a cutscene
+
+static bool IsDungeonScene(int sceneNum) {
+    return sceneNum == SCENE_DEKU_TREE || sceneNum == SCENE_DODONGOS_CAVERN || sceneNum == SCENE_JABU_JABU ||
+           sceneNum == SCENE_FOREST_TEMPLE || sceneNum == SCENE_FIRE_TEMPLE || sceneNum == SCENE_WATER_TEMPLE ||
+           sceneNum == SCENE_SPIRIT_TEMPLE || sceneNum == SCENE_SHADOW_TEMPLE || sceneNum == SCENE_BOTTOM_OF_THE_WELL ||
+           sceneNum == SCENE_ICE_CAVERN || sceneNum == SCENE_THIEVES_HIDEOUT || sceneNum == SCENE_INSIDE_GANONS_CASTLE;
+}
+
+static bool IsBossScene(int sceneNum) {
+    return sceneNum == SCENE_DEKU_TREE_BOSS || sceneNum == SCENE_DODONGOS_CAVERN_BOSS ||
+           sceneNum == SCENE_JABU_JABU_BOSS || sceneNum == SCENE_FOREST_TEMPLE_BOSS ||
+           sceneNum == SCENE_FIRE_TEMPLE_BOSS || sceneNum == SCENE_WATER_TEMPLE_BOSS ||
+           sceneNum == SCENE_SPIRIT_TEMPLE_BOSS || sceneNum == SCENE_SHADOW_TEMPLE_BOSS ||
+           sceneNum == SCENE_GANONDORF_BOSS || sceneNum == SCENE_GANON_BOSS;
+}
+
+static bool IsPartyScene(int sceneNum) {
+    return IsDungeonScene(sceneNum) || IsBossScene(sceneNum);
+}
+// Can we call ReloadSceneInPlace? Not while paused or in a cutscene
 static bool CanReloadSceneNow(PlayState* play) {
     Player* player = GET_PLAYER(play);
     return play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF &&
@@ -80,9 +182,12 @@ static bool CanReloadSceneNow(PlayState* play) {
            player != NULL && !(player->stateFlags1 & (PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE));
 }
 
-//Reload the current scene and keep the same position.
-//Used for day/night transitions and disconnects/reconnects
+// Reload the current scene and keep the same position.
+// Used for day/night transitions and disconnects/reconnects
 static void ReloadSceneInPlace(PlayState* play) {
+    if (play == nullptr)
+        return;
+
     Player* player = GET_PLAYER(play);
     if (player == NULL)
         return;
@@ -94,7 +199,7 @@ static void ReloadSceneInPlace(PlayState* play) {
         gSaveContext.horseData.pos.z = (int16_t)player->rideActor->world.pos.z;
         gSaveContext.horseData.angle = player->rideActor->world.rot.y;
     }
-
+    
     gSaveContext.respawnFlag = 1;
     play->nextEntranceIndex = gSaveContext.entranceIndex;
     gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = play->nextEntranceIndex;
@@ -118,20 +223,192 @@ static void ReloadSceneInPlace(PlayState* play) {
     });
 }
 
+
+// Must be 10 characters
+static const std::string CURRENT_VERSION = "BETA000001";
 ZeldaOnlineClient::ZeldaOnlineClient() {
     m_blockedParentSpawners.insert(ACTOR_BG_SPOT01_OBJECTS2);
 }
 
-void ZeldaOnlineClient::Enable() {
+void ZeldaOnlineClient::Connect() {
     m_host = CVarGetString("gZeldaOnline.Host", "107.175.79.45");
     m_port = CVarGetInteger("gZeldaOnline.Port", 21050);
+    m_nickName = CVarGetString("gZeldaOnline.Nickname", "Player");
 
+
+    std::vector<std::string> archives;
+    SplitSkinRef(m_skinRef, m_skinName, archives);
+    ZeldaOnlineRoomWindow::Instance->SetConnecting(true);
     ZNetworking::Enable(m_host.c_str(), m_port);
 
+    m_fileServerUrl = CVarGetString("gZeldaOnline.FileServer", "");
     RegisterNetworkingHook(true);
 
-    CVarSetString("gZeldaOnline.Host", m_host.c_str());
-    CVarSetInteger("gZeldaOnline.Port", m_port);
+    auto missingArchives = MissingArchives(archives);
+    if (missingArchives.size()) {
+        RequestSkinDownload(archives, m_skinName);
+    }
+    m_autoReconnect = true;
+
+}
+
+void ZeldaOnlineClient::Disconnect() {
+    m_autoReconnect = false;
+    
+    ZNetworking::Disable();
+    ReloadSceneInPlace(gPlayState);
+
+
+}
+
+void ZeldaOnlineClient::Enable() {
+    m_skinRef = CVarGetString("gZeldaOnline.Skin", "");
+    ZeldaOnlineRoomWindow::Instance->CenterAndExpand();
+
+    ZeldaOnlineRoomWindow::Instance->Show();
+
+
+    ZeldaOnlineRoomWindow::Instance->SetActionHandler([this](const PlayerListActionEvent* e) {
+        switch (e->action) {
+            case PlayerListAction::Invite: {
+                auto* inviteAction = reinterpret_cast<const PlayerListActionEventInvite*>(e);
+
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_INVITE) << PackedUInt2((uint16_t)inviteAction->networkID));
+                break;
+            }
+
+            case PlayerListAction::ChangeName: {
+                auto* textAction = reinterpret_cast<const PlayerListActionEventText*>(e);
+                m_nickName = textAction->text;
+
+                if (gPlayState) {
+                    NameTag_RemoveAllForActor(&GET_PLAYER(gPlayState)->actor);
+                    NameTag_RegisterForActor(&GET_PLAYER(gPlayState)->actor, m_nickName.c_str());
+                    m_removeNametagTimer = 20 * 5;
+                }
+                ZeldaOnlineRoomWindow::Instance->SetDisplayName("");
+                CVarSetString("gZeldaOnline.Nickname", m_nickName.c_str());
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                break;
+            }
+
+            case PlayerListAction::SetPartyScenes: {
+                auto* toggle = reinterpret_cast<const PlayerListActionEventToggle*>(e);
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_ENABLE_SCENES) << PackedUInt1(toggle->enabled ? 1 : 0));
+
+                if (gPlayState && IsPartyScene(gPlayState->sceneNum))
+                    ReloadSceneInPlace(gPlayState);
+                break;
+            }
+            case PlayerListAction::CreateParty: {
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_CREATE));
+                break;
+            }
+
+            case PlayerListAction::LeaveParty: {
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_LEAVE));
+                break;
+            }
+
+            case PlayerListAction::TeleportTo: {
+                auto* target = reinterpret_cast<const PlayerListActionEventInvite*>(e);
+                WritePacket(newPacket(CLIENT_PACKET_TELEPORT_TO_PARTY_MEMBER) << PackedUInt2(target->networkID));
+                break;
+            }
+
+            case PlayerListAction::Connect: {
+                this->Connect();
+                break;
+            }
+
+            case PlayerListAction::Disconnect: {
+                this->Disconnect();
+                break;
+            }
+            case PlayerListAction::AcceptInvite: {
+                auto* inviteAction = reinterpret_cast<const PlayerListActionEventInvite*>(e);
+
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_JOIN)
+                            << PackedUInt2((uint16_t)inviteAction->networkID) << PackedUInt4(inviteAction->partyID));
+                break;
+            }
+
+            case PlayerListAction::DeclineInvite: {
+                auto* inviteAction = reinterpret_cast<const PlayerListActionEventInvite*>(e);
+
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_DECLINE)
+                            << PackedUInt2((uint16_t)inviteAction->networkID) << PackedUInt4(inviteAction->partyID));
+
+                ZeldaOnlineRoomWindow::Instance->SetPendingPartyInvite(inviteAction->networkID, 0);
+                break;
+            }
+
+            case PlayerListAction::ChangeSkin: {
+                auto* textAction = reinterpret_cast<const PlayerListActionEventText*>(e);
+                m_skinRef = textAction->text;
+                std::vector<std::string> archives;
+                SplitSkinRef(m_skinRef, m_skinName, archives);
+
+                if (gPlayState != nullptr) {
+                    Player* player = GET_PLAYER(gPlayState);
+
+                    if (m_skinName == "") {
+                        player->skin = nullptr;
+                        Player_ReapplySkeleton(player, gPlayState);
+                        ZeldaOnlineRoomWindow::Instance->SetCurrentSkin("link");
+
+                        break;
+                    }
+
+                    player->skin = PlayerSkin_Get(m_skinName.c_str());
+                }
+
+                auto missingArchives = MissingArchives(archives);
+                if (missingArchives.size()) {
+                    RequestSkinDownload(archives, m_skinName);
+                }
+                if (gPlayState != nullptr)
+                    Player_ReapplySkeleton(GET_PLAYER(gPlayState), gPlayState);
+
+                ZeldaOnlineRoomWindow::Instance->SetCurrentSkin(m_skinRef);
+
+                break;
+            }
+
+            case PlayerListAction::UnstuckMe: {
+                if (gPlayState == nullptr)
+                    break;
+
+                Player_SetCsActionWithHaltedActors(gPlayState, NULL, 7);
+                gPlayState->nextEntranceIndex = gSaveContext.entranceIndex;
+                gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+                gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
+            } break;
+           
+            default:
+                break;
+        }
+    });
+    /*
+    ZeldaOnlineRoomWindow::Instance->SetAvailableSkins({
+        { "Link", "link" },
+        { "Amara64 by Jameriquiah", "amara64" },
+        { "Christmas Malon by MalonRose", "christmalon" },
+        { "Linkle by DanatheElf", "linkle" },
+        { "Kris by BanzMarten", "kris" },
+        { "Malon by MalonRose", "malon1" },
+        { "Mario by cy888", "mario" },
+        { "Turezi by Emkay", "turezi" },
+        { "Malon (alt) by ascendantlight", "malon2" },
+        { "Zelda by BungleTavern", "zelda" },
+    });*/
+
+    ZeldaOnlineRoomWindow::Instance->SetCurrentSkin(m_skinRef);
+
+    if (CVarGetInteger("gZeldaOnline.AutoConnect", 0) != 0)
+    {
+        ZeldaOnlineRoomWindow::Instance->BeginAutoConnect();
+    }
 }
 
 void ZeldaOnlineClient::OnConnected() {
@@ -140,33 +417,45 @@ void ZeldaOnlineClient::OnConnected() {
     m_lastAppearanceBlob.Clear();
     m_lastPlayerProps.Clear();
     RegisterHooks(true);
+    ActorControllerFactory::Instance().RegisterActorHooks(true);
+    ZeldaOnlineRoomWindow::Instance->SetConnected(true);
+    ZeldaOnlineRoomWindow::Instance->SetCurrentSkin(m_skinRef);
     recvBuffer.Clear();
 
     outgoingBuffer.Clear();
     m_myNetworkID = 0;
-    WritePacket(newPacket(0));
+    WritePacket(newPacket(CLIENT_PACKET_AUTH) << CURRENT_VERSION << PackedUInt1(m_didDisconnect) << PackedUInt8(m_clientGUID));
 
+    //We reconnected after a disconnect. Reload the scene
     if (m_didDisconnect)
         ReloadSceneInPlace(gPlayState);
+    m_showConnectionStatusTimer = 5 * 20;
 
+    
 }
 
 void ZeldaOnlineClient::OnDisconnected() {
+    ZeldaOnlineRoomWindow::Instance->Reset();
     DbgPrintf("OnDisconnected()\n");
     m_didDisconnect = true;
     m_hasWorldTime = false;
+    m_partyID = 0U;
     printf("PLAYER DISCONNECTED\n");
     RegisterNetworkingHook(false);
     RegisterHooks(false);
+    ActorControllerFactory::Instance().RegisterActorHooks(false);
 
-    ZeldaOnlineClient::Enable();
+    //If we disconnected then reconnect, unless we were kicked (due to wrong version for example)
+    if (m_autoReconnect && CVarGetInteger("gZeldaOnline.Enabled", 0)) {
+        Connect();
+    }
 }
 
 void ZeldaOnlineClient::OnConnectionClosedBeforeConnect() {
     OnDisconnected();
 }
 
-#include "src/overlays/actors/ovl_Obj_Switch/z_obj_switch.h"
+
 extern "C" {
 void ObjSwitch_FloorPressInit(ObjSwitch* objSwitch);
 void ObjSwitch_FloorReleaseInit(ObjSwitch* objSwitch);
@@ -189,9 +478,9 @@ static void NudgeFloorSwitches(int flag, u8 pressed) {
     }
 }
 
-//Anchor put puppet players into a different category. This caused problems when holding objects (the object would lag behind)
-//We are going to correctly put them in the player category but fix the ordering so the 
-//local player is always at head
+// Anchor put puppet players into a different category. This caused problems when holding objects (the object would lag
+// behind) We are going to correctly put them in the player category but fix the ordering so the local player is always
+// at head
 static void RelinkPuppetBehindPlayer(Actor* actor) {
     ActorListEntry* list = &gPlayState->actorCtx.actorLists[ACTORCAT_PLAYER];
     if (list->head == actor && actor->next != NULL) {
@@ -214,29 +503,16 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
     auto serverPacketID = packet.Read<PackedUInt1>().value();
 
     switch (serverPacketID) {
-        case SERVER_PACKET_UPDATE_PLAYER: {
 
+        case SERVER_PACKET_DISCONNECT: {
+            auto reason = packet.ReadString();
+            m_autoReconnect = false;
+            Messagebox_ShowErrorBox("Disconnected",
+                                    ("You have been disconnected from the server. Reason:" + reason).c_str());
         } break;
 
-        //old code
-        case SERVER_PACKET_UPDATE_ACTOR: {
-            if (packet.BytesLeft() < 2) {
-                SPDLOG_ERROR("[ZeldaOnline] malformed SERVER_PACKET_UPDATE_ACTOR ({} bytes)", packet.BytesLeft());
-                break;
-            }
 
-            int networkID = (int)(packet.Read<PackedUInt2>().value());
-
-            auto it = m_networkedActors.find(networkID);
-            if (it == m_networkedActors.end()) {
-                break;
-            }
-            if (it->second->IsLeader()) {
-                break;
-            }
-        } break;
-
-        //new code
+        // new code
         case SERVER_PACKET_ACTOR_PROPERTIES: {
             if (packet.BytesLeft() < 2)
                 break;
@@ -252,10 +528,11 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 return;
             ByteStream props = packet.Read(packet.BytesLeft());
             if (controller->GetActor()) {
-                if (controller->GetActor()->init) {
-                    controller->AppendPendingProperties(props);
-                } else
-                    controller->ReadProperties(props);
+                controller->AppendPendingProperties(props);
+
+                //Paused, just apply the properties now
+                if (gPlayState->pauseCtx.state != 0)
+                    controller->ApplyPendingProperties();
             }
 
         } break;
@@ -263,30 +540,25 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
         case SERVER_PACKET_ACTOR_SPAWN:
         case SERVER_PACKET_ACTOR_SPAWN_AS_CHILD: {
 
-            int parentID = serverPacketID == SERVER_PACKET_ACTOR_SPAWN_AS_CHILD
-                               ? (s16)(packet.Read<PackedUInt2>().value())
-                               : 0;
+            int parentID =
+                serverPacketID == SERVER_PACKET_ACTOR_SPAWN_AS_CHILD ? (s16)(packet.Read<PackedUInt2>().value()) : 0;
 
             auto sceneKey = (int)(packet.Read<PackedUInt4>().value());
             int roomIndex = (int)(packet.Read<PackedInt1>().value());
             int networkID = (int)(packet.Read<PackedUInt2>().value());
             s16 actorId = (s16)(packet.Read<PackedUInt2>().value());
 
-            printf("SERVER_PACKET_SPAWN_ACTOR ACTOR: %i\n", int(actorId));
+            printf("SERVER_PACKET_SPAWN_ACTOR ACTOR: %i(%i) PARENT ID: %i\n", int(actorId), networkID, parentID);
             s16 params = (s16)(packet.Read<PackedInt2>().value());
 
-            PosRot posRot = { { packet.Read<PackedFloat4>().value(),
-                                packet.Read<PackedFloat4>().value(),
+            PosRot posRot = { { packet.Read<PackedFloat4>().value(), packet.Read<PackedFloat4>().value(),
                                 packet.Read<PackedFloat4>().value() },
-                              { (s16)(packet.Read<PackedInt2>().value()),
-                                (s16)(packet.Read<PackedInt2>().value()),
+                              { (s16)(packet.Read<PackedInt2>().value()), (s16)(packet.Read<PackedInt2>().value()),
                                 (s16)(packet.Read<PackedInt2>().value()) } };
 
-            PosRot home = { { packet.Read<PackedFloat4>().value(),
-                              packet.Read<PackedFloat4>().value(),
+            PosRot home = { { packet.Read<PackedFloat4>().value(), packet.Read<PackedFloat4>().value(),
                               packet.Read<PackedFloat4>().value() },
-                            { (s16)(packet.Read<PackedInt2>().value()),
-                              (s16)(packet.Read<PackedInt2>().value()),
+                            { (s16)(packet.Read<PackedInt2>().value()), (s16)(packet.Read<PackedInt2>().value()),
                               (s16)(packet.Read<PackedInt2>().value())
 
                             } };
@@ -301,69 +573,47 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 DetachAndKill(existing->second);
             }
 
-            auto localKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+            auto localKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
 
             int leaderID = packet.Read<PackedUInt2>().value();
 
             int isActorLeader = leaderID == m_myNetworkID;
 
+            if (sceneKey != localKey) {
+                printf("MISMATCH SCENE KEY %i:%i\n", localKey, sceneKey);
+                break;
+            }
+
             if (actorId == ACTOR_PLAYER) {
-                if (sceneKey != localKey) {
-                    printf("MISMATCH SCENE KEY %i:%i\n", localKey, sceneKey);
-                    break;
-                }
+
 
                 auto appearanceLen = packet.ReadVarUInt();
                 ByteStream appearance = packet.Read(appearanceLen);
                 auto propertiesLen = packet.BytesLeft();
                 ByteStream properties = packet.Read(propertiesLen);
 
-                gZeldaOnlinePuppetSpawn.linkAge = 1;
-                gZeldaOnlinePuppetSpawn.name[0] = '\0';
-                {
-                    ByteStream peek = appearance;
-                    if (peek.BytesLeft() >= 6) {
-                        gZeldaOnlinePuppetSpawn.linkAge =
-                            (u8)(peek.Read<PackedUInt1>().value());
-                        peek.Read<PackedUInt1>();
-                        peek.Read<PackedUInt1>();
-                        peek.Read<PackedUInt1>();
-                        peek.Read<PackedUInt1>();
-                        unsigned int nameLen = peek.Read<PackedUInt1>().value();
-                        if (nameLen > 16 || peek.BytesLeft() < nameLen)
-                            nameLen = 0;
-                        std::string name = peek.ReadString(nameLen);
-                        std::memcpy(gZeldaOnlinePuppetSpawn.name, name.c_str(), nameLen);
-                        gZeldaOnlinePuppetSpawn.name[nameLen] = '\0';
-                    }
-                }
-
-                m_spawningPuppetPlayer = true;
-
                 Actor* actor =
                     Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, ACTOR_PLAYER, posRot.pos.x, posRot.pos.y,
                                       posRot.pos.z, posRot.rot.x, posRot.rot.y, posRot.rot.z, home.pos.x, home.pos.y,
-                                      home.pos.z, home.rot.x, home.rot.y, home.rot.z, 0, 0);
-                m_spawningPuppetPlayer = false;
+                                      home.pos.z, home.rot.x, home.rot.y, home.rot.z, 0, 1);
 
                 if (actor == NULL || actor->update == NULL) {
                     break;
                 }
-
-                RelinkPuppetBehindPlayer(actor);
-
+                InitPuppetPlayer(actor);
+                 
                 actor->world = posRot;
                 Math_Vec3f_Copy(&actor->prevPos, &actor->world.pos);
                 actor->room = -1;
 
                 auto controller = new PlayerPuppetController(actor, networkID, sceneKey, appearance);
                 m_networkedActors[networkID] = controller;
-                controller->ReadProperties(properties);
+                controller->AppendPendingProperties(properties);
                 break;
             }
 
-            if (sceneKey != localKey ||
-                (roomIndex != -1 && roomIndex != gPlayState->roomCtx.curRoom.num)) {
+            if (sceneKey != localKey || (roomIndex != -1 && roomIndex != gPlayState->roomCtx.curRoom.num)) {
                 break;
             }
 
@@ -371,22 +621,29 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 posRot.pos.x != home.pos.x || posRot.pos.y != home.pos.y || posRot.pos.z != home.pos.z;
             Actor* actor = nullptr;
 
-            if (parentID == 0)
+            //Our own clear flags should not interfere in this spawn
+            auto oldClearFlags = gPlayState->actorCtx.flags.clear;
+            gPlayState->actorCtx.flags.clear = 0U;
+            if (parentID == 0) {
+                printf("Actor_SpawnDirect\n");
                 actor = Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, home.pos.x, home.pos.y,
                                           home.pos.z, home.rot.x, home.rot.y, home.rot.z, home.pos.x, home.pos.y,
                                           home.pos.z, home.rot.x, home.rot.y, home.rot.z, params, 1);
+            }
             else {
                 auto it = m_networkedActors.find(parentID);
                 if (it != m_networkedActors.end()) {
                     auto parentActor = it->second->GetActor();
 
                     if (parentActor != nullptr) {
+                        printf("Actor_SpawnAsChildDirect\n");
                         actor = Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parentActor, gPlayState, actorId,
                                                          home.pos.x, home.pos.y, home.pos.z, home.rot.x, home.rot.y,
                                                          home.rot.z, home.pos.x, home.pos.y, home.pos.z, home.rot.x,
                                                          home.rot.y, home.rot.z, params, 1);
                     } else {
                         SPDLOG_WARN("[ZeldaOnline] parent {} missing for child spawn, degrading", parentID);
+                        printf("Actor_SpawnDirect\n");
                         actor =
                             Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, home.pos.x, home.pos.y,
                                               home.pos.z, home.rot.x, home.rot.y, home.rot.z, home.pos.x, home.pos.y,
@@ -394,17 +651,13 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                     }
                 }
             }
+            //Restore old flags
+            gPlayState->actorCtx.flags.clear = oldClearFlags;
+
             if (actor == NULL || actor->update == NULL) {
                 break;
             }
             actor->room = roomIndex;
-
-            if (actor->init == nullptr) {
-
-                if (movedFromHome)
-                    actor->world = posRot;
-                Math_Vec3f_Copy(&actor->prevPos, &actor->world.pos);
-            }
 
             AbstractActorController* controller = ActorControllerFactory::Instance().Create(
                 actorId, actor, networkID, sceneKey, roomIndex, isActorLeader);
@@ -417,22 +670,33 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             auto isLocked = packet.Read<PackedUInt1>().value();
             auto isCreator = packet.Read<PackedUInt1>().value();
-
+            printf("IS CREATOR: %i\n", int(isCreator));
             controller->SetCreator(isCreator);
             ByteStream statePacket = packet.Read(packet.BytesLeft());
 
-            if (actor->init)
-                controller->AppendPendingProperties(statePacket);
-            else {
-                controller->ActorInit(gPlayState);
-                controller->ReadProperties(statePacket);
-            }
-
+            controller->AppendPendingProperties(statePacket);
             controller->SetLocked(isLocked);
 
             m_networkedActors[networkID] = controller;
 
-        } break;
+            if (!GameInteractor_ShouldActorDelayInit(actor))
+            {
+                if (Object_IsLoaded(&gPlayState->objectCtx, actor->objBankIndex)) {
+                    Actor_SetObjectDependency(gPlayState, actor);
+
+                    if (GameInteractor_ShouldActorInit(actor)) {
+                        actor->init(actor, gPlayState);
+                        actor->init = NULL;
+
+                        GameInteractor_ExecuteOnActorInit(actor);
+                    } else {
+                        actor->init = NULL;
+                        Actor_Kill(actor);
+                    }
+                }
+            }
+
+        } break; 
 
         case SERVER_PACKET_UPDATE_APPEARANCE: {
             if (packet.BytesLeft() < 2)
@@ -453,6 +717,8 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             UpdateAppearance();
             printf("MY NETWORK ID SET TO %i\n", int(m_myNetworkID));
+
+            WritePacket(newPacket(CLIENT_PACKET_INIT_PLAYER_LIST));
         } break;
 
         case SERVER_PACKET_DESTROY_ACTOR: {
@@ -467,22 +733,16 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             AbstractActorController* controller = it->second;
 
             if (controller->IsRunningLocally()) {
-                controller->Detach();
-                RemoveNetworkedActor(controller->NetworkID(), controller);
+                DetachAndKill(controller);
                 break;
             }
 
-            Player* player = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
-            if (player != NULL && player->talkActor == controller->GetActor()) {
-                //Removed this. Only caused crashes and doesnt seem to be needed
-                //player->talkActor = nullptr;
-            }
-
+            controller->ApplyPendingProperties();
             controller->OnServerDestroy();
             DetachAndKill(controller);
         } break;
 
-        case SERVER_PACKET_ACTOR_TRIGGER: {
+                case SERVER_PACKET_ACTOR_TRIGGER: {
             if (packet.BytesLeft() < 3)
                 break;
 
@@ -493,13 +753,15 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             if (it == m_networkedActors.end())
                 break;
 
-            if (it->second == nullptr)
+            AbstractActorController* controller = it->second;
+
+            if (controller == nullptr)
                 break;
 
-            if (fromPuppet && !it->second->IsLeader())
+            if (fromPuppet && !controller->IsLeader())
                 break;
 
-            else if (!fromPuppet && it->second->IsLeader())
+            else if (!fromPuppet && controller->IsLeader())
                 break;
 
             unsigned int nameLen = packet.Read<PackedUInt1>().value();
@@ -507,7 +769,8 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 break;
             std::string name = packet.ReadString(nameLen);
 
-            it->second->OnTrigger(name, packet);
+            controller->ApplyPendingProperties();
+            controller->OnTrigger(name, packet);
         } break;
 
         case SERVER_PACKET_SET_ACTOR_LEADER: {
@@ -517,7 +780,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             int ownerID = (int)(packet.Read<PackedUInt2>().value());
             auto it = m_networkedActors.find(networkID);
             if (it == m_networkedActors.end()) {
-                printf("SERVER_PACKET_SET_ACTOR_LEADER: Invalid network ID: %i\n", networkID);
+                printf("SERVER_PACKET_SET_ACTOR_LEADER: Invalid network ID: %i:%i\n", networkID, int(ownerID == m_myNetworkID));
                 if (ownerID == m_myNetworkID) {
                     SendDeclineActorLeader(networkID);
                 }
@@ -532,8 +795,8 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 break;
             }
 
-            if (!it->second->IsLocked() || ownerID == m_myNetworkID)
-                it->second->SetLeader(ownerID != 0 && ownerID == m_myNetworkID);
+            controller->ApplyPendingProperties();
+            controller->SetLeader(ownerID != 0 && ownerID == m_myNetworkID);
         } break;
 
         case SERVER_PACKET_SCENE_FLAG: {
@@ -551,6 +814,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             printf("SCENE FLAG PACKET: %i:%i\n", int(flagType), int(setFlag));
 
+           
             if (setFlag) {
                 if (flagType == FLAG_SCENE_SWITCH || flagType == FLAG_SCENE_CLEAR) {
                     GameInteractionEffect::SetSceneFlag effect;
@@ -561,6 +825,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
                     if (flagType == FLAG_SCENE_SWITCH)
                         NudgeFloorSwitches(flag, setFlag);
+
                 }
 
                 else if (flagType == FLAG_INF_TABLE || flagType == FLAG_EVENT_CHECK_INF) {
@@ -569,6 +834,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                     effect.parameters[1] = flag;
                     effect.Apply();
                 }
+
             } else {
                 if (flagType == FLAG_SCENE_SWITCH || flagType == FLAG_SCENE_CLEAR) {
                     GameInteractionEffect::UnsetSceneFlag effect;
@@ -594,16 +860,19 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             m_serverDayTime = (u16)(packet.Read<PackedUInt2>().value());
 
-            s16 drift = (s16)(m_serverDayTime - gSaveContext.dayTime);
-            if (!m_hasWorldTime || drift > 600 || drift < -600) {
-                gSaveContext.skyboxTime = gSaveContext.dayTime = m_serverDayTime;
-            }
-            m_hasWorldTime = true;
-
+            u8 crossed = 0;
             if (packet.BytesLeft() >= 1)
-                packet.Read<PackedUInt1>();
+                crossed = (u8)(packet.Read<PackedUInt1>().value());
             if (packet.BytesLeft() >= 2)
                 m_serverTimeRate = (u16)(packet.Read<PackedUInt2>().value());
+
+            if (gPlayState == nullptr || !ShouldFreezeTime(gPlayState->sceneNum, GetSceneVariant(gPlayState->sceneNum))) {
+                s16 drift = (s16)(m_serverDayTime - gSaveContext.dayTime);
+                if (!m_hasWorldTime || crossed || drift > 600 || drift < -600) {
+                    gSaveContext.skyboxTime = gSaveContext.dayTime = m_serverDayTime;
+                }
+            }
+            m_hasWorldTime = true;
 
         } break;
 
@@ -613,7 +882,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             }
 
             auto sceneKey = packet.Read<PackedUInt4>().value();
-            auto localKey = MakeSceneKey(gPlayState->sceneNum, !LINK_IS_ADULT ? 0 : 1, 0);
+            auto localKey = MakeSceneKey(gPlayState->sceneNum, !LINK_IS_ADULT ? 0 : 1, GetSceneVariant(gPlayState->sceneNum));
             if (localKey != sceneKey) {
                 break;
             }
@@ -638,11 +907,13 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             s8 roomIndex = (packet.Read<PackedInt1>().value());
             u32 mask = packet.Read<PackedUInt4>().value();
 
-            auto localKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+            auto localKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
             if (localKey != sceneKey || roomIndex != (gPlayState->roomCtx.curRoom.num)) {
                 break;
             }
-            gPlayState->actorCtx.flags.tempSwch = m_currentRoomTempMask = mask;
+
+            gPlayState->actorCtx.flags.tempSwch = (gPlayState->actorCtx.flags.tempSwch & 0x00FFFFFF) | (mask & 0xFF000000);
         } break;
 
         case SERVER_PACKET_SET_ACTOR_LOCKED: {
@@ -692,14 +963,30 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                     match->id, match, networkID, (int)(sceneKey), gPlayState->roomCtx.curRoom.num, true);
                 if (controller) {
                     controller->SetCreator(true);
+
+                    auto existing = m_networkedActors.find(networkID);
+                    if (existing != m_networkedActors.end()) {
+                        SPDLOG_INFO("[ZeldaOnline] re-introduction of netID {}: replacing predecessor", networkID);
+                        DetachAndKill(existing->second);
+                    }
+
                     m_networkedActors[networkID] = controller;
                 }
                 break;
             }
+
+            auto existing = m_networkedActors.find(networkID);
+            if (existing != m_networkedActors.end()) {
+                SPDLOG_INFO("[ZeldaOnline] re-introduction of netID {}: replacing predecessor", networkID);
+                DetachAndKill(existing->second);
+            }
+
+
             AbstractActorController* controller = static_cast<AbstractActorController*>(match->zoController);
             controller->SetNetworkID(networkID);
 
             m_networkedActors[networkID] = controller;
+
 
         } break;
 
@@ -713,17 +1000,26 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             AbstractActorController* ctl = GetNetworkController(networkID);
 
             if (ctl && ctl->GetActor()) {
-                if (ctl->GetActor()->id != ACTOR_PLAYER && !ctl->ShouldSuppressSounds()) {
-                    break;
-                }
 
-                Audio_PlaySoundGeneral(sfxId, &ctl->GetActor()->projectedPos, 4, &gSfxDefaultFreqAndVolScale,
-                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                if (ctl->IsPlayer()) {
+                    static int sFrequenciesIndex = 0;
+                    static float sFrequencies[10];
+
+
+                    auto playerController = static_cast<PlayerPuppetController*>(ctl);
+                    sFrequencies[sFrequenciesIndex] = playerController->SoundFrequencyMultiplier();
+
+                    Audio_PlaySoundGeneral(sfxId, &ctl->GetActor()->projectedPos, 4, &sFrequencies[sFrequenciesIndex],
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    sFrequenciesIndex = (sFrequenciesIndex + 1) % 10;
+
+                }
+                else Audio_PlaySoundGeneral(sfxId, &ctl->GetActor()->projectedPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             }
             break;
         }
 
-        //Anchor
+        // Anchor
         case SERVER_PACKET_OCARINA_SFX: {
             int networkID = packet.Read<PackedUInt2>().value();
             u8 note = packet.Read<PackedUInt1>().value();
@@ -732,29 +1028,453 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             AbstractActorController* ctl = GetNetworkController(networkID);
             if (ctl != nullptr && ctl->IsPlayer() && ctl->GetActor()) {
-                PlayerPuppetController* playerController = static_cast<PlayerPuppetController*>(ctl);
-                auto puppetState = playerController->PuppetState();
-                puppetState->ocarinaModulator = modulator;
-                puppetState->ocarinaBend = bend;
+                PlayerPuppetController* puppet = static_cast<PlayerPuppetController*>(ctl);
+                puppet->m_ocarinaModulator = modulator;
+                puppet->m_ocarinaBend = bend;
 
-                if (note != 0xFF && puppetState->ocarinaNote != note) {
-                    Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD07, puppetState->ocarinaBend - 1);
+                if (note != 0xFF && puppet->m_ocarinaNote != note) {
+                    Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD07, puppet->m_ocarinaBend - 1);
                     Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD05, note);
 
                     Audio_PlaySoundGeneral(NA_SE_OC_OCARINA, &ctl->GetActor()->projectedPos, 4,
-                                           &puppetState->ocarinaModulator, &D_80130F28, &gSfxDefaultReverb);
-                } else if (puppetState->ocarinaNote != 0xFF && note == 0xFF) {
+                                           &puppet->m_ocarinaModulator, &D_80130F28, &gSfxDefaultReverb);
+                } else if (puppet->m_ocarinaNote != 0xFF && note == 0xFF) {
                     Audio_StopSfxById(NA_SE_OC_OCARINA);
                 }
-                puppetState->ocarinaNote = note;
+                puppet->m_ocarinaNote = note;
             }
             break;
         }
 
+        case SERVER_PACKET_SCENE_FLAGS: {
+            if (gPlayState == nullptr)
+                break;
+
+            auto sceneKey = packet.Read<PackedUInt4>().value();
+            auto localKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+            m_blockSceneSetupActors = -1;
+            printf("UNBLOCKING SETUP ACTORS\n");
+
+            if (sceneKey == localKey) {
+                
+                auto sceneFlags = packet.Read<PackedUInt4>().value();
+                auto clearFlags = packet.Read<PackedUInt4>().value();
+                auto tempSceneFlags = packet.Read<PackedUInt4>().value();
+                auto doorMask = packet.Read<PackedUInt4>().value();
+                auto sessionID = packet.Read<PackedUInt8>().value();
+
+
+                if (IsDungeonScene(gPlayState->sceneNum) || IsBossScene(gPlayState->sceneNum)) {
+                    //Dungeon has reset since our last visit (or this is a newone)
+                    if (sessionID != m_dungeonSessions[sceneKey]) {
+                        //Clear our chests, locked doors and keys
+                        gPlayState->actorCtx.flags.chest = 0;
+                        m_savedSwch = 0U;   
+                        gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] = 0;
+                        m_dungeonSessions[sceneKey] = sessionID;
+
+                        static constexpr s32 shadowTempleJarKeyFlag = 1;
+                        // Reset the key in the jar in shadow temp
+                        if (gPlayState->sceneNum == SCENE_SHADOW_TEMPLE) {
+                            gPlayState->actorCtx.flags.collect &= ~(1 << (shadowTempleJarKeyFlag - 1));
+                        }
+                    }
+
+                    //Adopt the servers scene flags (ignore locked doors flags)
+                    gPlayState->actorCtx.flags.swch = sceneFlags | (m_savedSwch & doorMask);
+                    gPlayState->actorCtx.flags.clear = clearFlags;
+                    gPlayState->actorCtx.flags.tempSwch = (gPlayState->actorCtx.flags.tempSwch & 0xFF000000) | (tempSceneFlags & 0x00FFFFFF);
+                } else {
+                    //Not a dungeon, just OR the flags
+                    gPlayState->actorCtx.flags.swch |= sceneFlags;
+                    gPlayState->actorCtx.flags.clear |= clearFlags;
+                    gPlayState->actorCtx.flags.tempSwch |= (tempSceneFlags & 0x00FFFFFF);
+                }
+                
+            }
+            break;
+        }
+
+        case SERVER_PACKET_INF_FLAGS_LIST: {
+            auto sceneKey = packet.Read<PackedUInt4>().value();
+            auto localKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+
+            if (sceneKey == localKey) {
+
+                auto count = packet.ReadVarUInt();
+
+                for (auto i = 0U; i < count; ++i) {
+                    auto flagType = packet.Read<PackedUInt1>().value();
+                    auto flag = packet.Read<PackedUInt2>().value();
+                    auto value = packet.Read<PackedUInt1>().value();
+
+                    if (value) {
+                        GameInteractionEffect::SetFlag effect;
+                        effect.parameters[0] = flagType;
+                        effect.parameters[1] = flag;
+                        effect.Apply();
+                    } else {
+                        GameInteractionEffect::UnsetFlag effect;
+                        effect.parameters[0] = flagType;
+                        effect.parameters[1] = flag;
+                        effect.Apply();
+                    }
+                }
+            }
+            break;
+        }
+
+        case SERVER_PACKET_PLAYER_LIST_APPEND:
+        {
+            if (packet.BytesLeft() < 1)
+                break;
+
+            auto* window = ZeldaOnlineRoomWindow::Instance;
+            int count = packet.Read<PackedInt4>().value();
+
+            for (int i = 0; i < count; i++) {
+                if (packet.BytesLeft() < 3)
+                    break;
+
+                PlayerEntry entry;
+                entry.networkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+
+                unsigned int nameLen = packet.Read<PackedUInt2>().value();
+                if (packet.BytesLeft() < nameLen)
+                    break;
+
+                entry.name = packet.ReadString(nameLen);
+                entry.sceneNum = packet.Read<PackedInt2>().value();
+                entry.roomIndex = packet.Read<PackedUInt1>().value();
+                entry.age = packet.Read<PackedUInt1>().value();
+
+                if (entry.name.empty())
+                    entry.name = "Player " + std::to_string(entry.networkID);
+
+                if (window != nullptr)
+                    window->AddPlayer(entry);
+            }
+        } break;
+
+        case SERVER_PACKET_PLAYER_LIST_REMOVE: {
+            if (packet.BytesLeft() < 2)
+                break;
+
+            uint32_t networkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->RemovePlayer(networkID);
+        } break;
+
+        case SERVER_PACKET_PLAYER_LIST_UPDATE: {
+            uint32_t networkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+            auto newName = packet.ReadString(packet.Read<PackedUInt2>().value());
+
+            auto sceneNum = packet.Read<PackedInt2>().value();
+            auto roomIndex = packet.Read<PackedUInt1>().value();
+            uint8_t age = packet.Read<PackedUInt1>().value();
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->UpdateEntry(networkID, newName, sceneNum, roomIndex, age);
+        } break;
+
+        case SERVER_PACKET_PARTY_JOIN: {
+            if (packet.BytesLeft() < 5)
+                break;
+
+            uint32_t previousPartyID = m_partyID;
+
+            m_partyID = (uint32_t)(packet.Read<PackedUInt4>().value());
+            bool isCreator = packet.Read<PackedUInt1>().value() != 0;
+
+            if (m_partyID == previousPartyID)
+                break;
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr) {
+                ZeldaOnlineRoomWindow::Instance->SetHasParty(m_partyID != 0);
+                ZeldaOnlineRoomWindow::Instance->ClearPendingInvites();
+
+                if (m_partyID == 0 || isCreator)
+                    ZeldaOnlineRoomWindow::Instance->ClearPartyFlags();
+            }
+
+            if (gPlayState && (IsDungeonScene(gPlayState->sceneNum) || IsBossScene(gPlayState->sceneNum)))
+                ReloadSceneInPlace(gPlayState);
+        } break;
+
+        case SERVER_PACKET_PARTY_INVITE: {
+            if (packet.BytesLeft() < 6)
+                break;
+
+            uint32_t fromNetworkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+            uint32_t partyID = (uint32_t)(packet.Read<PackedUInt4>().value());
+
+            if (partyID == 0 || partyID == m_partyID)
+                break;
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->SetPendingPartyInvite(fromNetworkID, partyID);
+        } break;
+
+        case SERVER_PACKET_PARTY_MEMBER_ADD: {
+            if (packet.BytesLeft() < 2)
+                break;
+
+            uint32_t memberNetworkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->SetInParty(memberNetworkID, true);
+        } break;
+
+        case SERVER_PACKET_PARTY_MEMBER_REMOVE: {
+            if (packet.BytesLeft() < 2)
+                break;
+
+            uint32_t memberNetworkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->SetInParty(memberNetworkID, false);
+        } break;
+
+
+        case SERVER_PACKET_TELEPORT_PLAYER: {
+            auto entranceID = packet.Read<PackedInt4>().value();
+            auto sceneNum = packet.Read<PackedUInt2>().value();
+            auto roomIndex = packet.Read<PackedUInt1>().value();
+
+            auto x = packet.Read<PackedFloat4>().value();
+            auto y = packet.Read<PackedFloat4>().value();
+            auto z = packet.Read<PackedFloat4>().value();
+            
+            if (!gPlayState)
+                break;
+
+            Player* player = GET_PLAYER(gPlayState);
+            if (player == NULL)
+                return;
+
+            if ((player->stateFlags1 & PLAYER_STATE1_ON_HORSE) && player->rideActor != NULL) {
+                gSaveContext.horseData.scene = gPlayState->sceneNum;
+                gSaveContext.horseData.pos.x = (int16_t)player->rideActor->world.pos.x;
+                gSaveContext.horseData.pos.y = (int16_t)player->rideActor->world.pos.y;
+                gSaveContext.horseData.pos.z = (int16_t)player->rideActor->world.pos.z;
+                gSaveContext.horseData.angle = player->rideActor->world.rot.y;
+            }
+
+            gSaveContext.respawnFlag = 1;
+            gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = gPlayState->nextEntranceIndex = entranceID;
+            gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = roomIndex;
+            gSaveContext.respawn[RESPAWN_MODE_DOWN].pos = Vec3f_{x, y, z};
+            gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = player->actor.shape.rot.y;
+            /*
+            if (gPlayState->roomCtx.curRoom.behaviorType2 < 4) {
+                gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0DFF;
+            } else {
+                Camera* camera = GET_ACTIVE_CAM(gPlayState);
+                gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0D00 | camera->camDataIdx;
+            }*/
+            gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+            gPlayState->transitionType = TRANS_TYPE_INSTANT;
+            gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
+
+            static int hookId = 0;
+            hookId = REGISTER_VB_SHOULD(VB_INFLICT_VOID_DAMAGE, {
+                *should = false;
+                GameInteractor::Instance->UnregisterGameHookForID<GameInteractor::OnVanillaBehavior>(hookId);
+            });
+
+            break;
+
+
+        } break;
+
+        case SERVER_PACKET_SET_PLAYERLIST_STATUS:
+        {
+            auto red = packet.Read<PackedUInt1>().value();
+            auto green = packet.Read<PackedUInt1>().value();
+            auto blue = packet.Read<PackedUInt1>().value();
+            auto text = packet.ReadString();
+
+            ZeldaOnlineRoomWindow::Instance->SetStatus(text, ImVec4{red / 255.0f, green / 255.0f, blue / 255.0f, 1.0f});
+            m_clearPlayerListStatusTimer = 5 * 20;
+
+        }
+        break;
+
+        case SERVER_PACKET_ACTOR_STATIC_SPAWN:
+        {
+            if (gPlayState == nullptr)
+                break;
+
+            auto sceneKey = packet.Read<PackedUInt4>().value();
+            auto localKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+            auto roomIndex = packet.Read<PackedInt1>().value();
+
+            if (sceneKey == localKey && roomIndex == gPlayState->roomCtx.curRoom.num) {
+                auto actorID = (int16_t)packet.Read<PackedUInt2>().value();
+                auto x = packet.Read<PackedFloat4>().value();
+                auto y = packet.Read<PackedFloat4>().value();
+                auto z = packet.Read<PackedFloat4>().value();
+                auto rotX = packet.Read<PackedInt2>().value();
+                auto rotY = packet.Read<PackedInt2>().value();
+                auto rotZ = packet.Read<PackedInt2>().value();
+                int16_t params = packet.Read<PackedInt2>().value();
+
+                Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorID, x, y, z, rotX, rotY, rotZ, x, y, z, rotX, rotY, rotZ, params, false);
+            }
+            
+            break;
+        }
+
+        case SERVER_PACKET_POPULATE_SKINS: {
+            if (packet.BytesLeft() < 2)
+                break;
+
+            unsigned int count = packet.Read<PackedUInt2>().value();
+            std::vector<SkinOption> skins;
+
+            for (unsigned int i = 0; i < count; i++) {
+                if (packet.BytesLeft() < 2) {
+                    break;
+                }
+
+                unsigned int displayLen = packet.Read<PackedUInt2>().value();
+                std::string displayName = packet.ReadString(displayLen);
+
+
+                unsigned int referenceLen = packet.Read<PackedUInt2>().value();
+                std::string reference = packet.ReadString(referenceLen);
+
+                skins.push_back(SkinOption{ displayName, reference });
+            }
+
+            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+                ZeldaOnlineRoomWindow::Instance->SetAvailableSkins(skins);
+        } break;
+
+        //Anchor
+        case SERVER_PACKET_CHEST_OPENED: {
+            if (packet.BytesLeft() < 12)
+                break;
+
+            u16 networkID = (u16)(packet.Read<PackedUInt2>().value());
+            u32 sceneKey = packet.Read<PackedUInt4>().value();
+            s8 roomIndex = (s8)(packet.Read<PackedInt1>().value());
+            u8 flag = packet.Read<PackedUInt1>().value();
+            u16 modId = (u16)(packet.Read<PackedUInt2>().value());
+            u16 getItemId = (u16)(packet.Read<PackedUInt2>().value());
+
+            if (gPlayState == NULL)
+                break;
+
+            auto localKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+
+            if (sceneKey != localKey)
+                break;
+
+
+
+            GetItemEntry getItemEntry;
+            if (modId == MOD_NONE) {
+                getItemEntry = ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, getItemId);
+            } else {
+                getItemEntry = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(getItemId)).GetGIEntry_Copy();
+            }
+
+            if (getItemEntry.getItemId == GI_NONE)
+                break;
+
+            if (!Flags_GetTreasure(gPlayState, flag)) {
+                if (getItemEntry.modIndex == MOD_NONE) {
+                    if (getItemEntry.getItemId == GI_SWORD_BGS) {
+                        gSaveContext.bgsFlag = true;
+                        gSaveContext.swordHealth = 8;
+                    }
+                    Item_Give(gPlayState, static_cast<u8>(getItemEntry.itemId));
+                } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
+                    if (getItemEntry.getItemId == RG_ICE_TRAP) {
+                        gSaveContext.ship.pendingIceTrapCount++;
+                    } else {
+                        Randomizer_Item_Give(gPlayState, getItemEntry);
+                    }
+                }
+
+                if (getItemEntry.gid == GID_HEART_CONTAINER || getItemEntry.gid == GID_HEART_PIECE) {
+                    gSaveContext.healthAccumulator = 0x140;
+                }
+
+                s32 heartPieces = (s32)(gSaveContext.inventory.questItems & 0xF0000000) >> (QUEST_HEART_PIECE + 4);
+                if (heartPieces >= 4) {
+                    gSaveContext.inventory.questItems &= ~0xF0000000;
+                    gSaveContext.inventory.questItems += (heartPieces % 4) << (QUEST_HEART_PIECE + 4);
+                    gSaveContext.healthCapacity += 0x10 * (heartPieces / 4);
+                    gSaveContext.health += 0x10 * (heartPieces / 4);
+                }
+
+                GameInteractionEffect::SetSceneFlag effect;
+                effect.parameters[0] = gPlayState->sceneNum;
+                effect.parameters[1] = FLAG_SCENE_TREASURE;
+                effect.parameters[2] = flag;
+                effect.Apply();
+            }
+
+            if (getItemEntry.getItemCategory != ITEM_CATEGORY_JUNK) {
+                std::string opener = ZeldaOnlineRoomWindow::Instance != nullptr
+                                         ? ZeldaOnlineRoomWindow::Instance->NameOf(networkID)
+                                         : std::string();
+
+                if (getItemEntry.modIndex == MOD_NONE) {
+                    Notification::Emit({
+                        .itemIcon = GetTextureForItemId(getItemEntry.itemId),
+                        .prefix = opener,
+                        .message = "found",
+                        .suffix = SohUtils::GetItemName(getItemEntry.itemId),
+                    });
+                } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
+                    Notification::Emit({
+                        .prefix = opener, .message = "found",
+                        .suffix = Rando::StaticData::RetrieveItem((RandomizerGet)(getItemEntry.getItemId))
+                                      .GetName()
+                                      .GetEnglish()
+                    });
+                }
+            }
+        } break;
         default:
             SPDLOG_DEBUG("[ZeldaOnline] unhandled server packet id {}", serverPacketID);
             break;
     }
+}
+
+void ZeldaOnlineClient::RequestSkinDownload(const std::vector<std::string>& archiveNames, const std::string& skinName) {
+    if (m_fileServerUrl.empty() || archiveNames.empty()) {
+        return;
+    }
+
+    if (!ResourceDownloader::IsSafeFileName(skinName)) {
+        SPDLOG_WARN("rejected skin download: bad skin name {}", skinName);
+        return;
+    }
+
+    std::string base = m_fileServerUrl;
+    if (base.back() != '/') {
+        base += '/';
+    }
+
+    std::vector<std::string> urls;
+    urls.reserve(archiveNames.size());
+
+    for (const std::string& archiveName : archiveNames) {
+        if (!ResourceDownloader::IsSafeFileName(archiveName)) {
+            SPDLOG_WARN("rejected skin download: bad archive name {}", archiveName);
+            return;
+        }
+        urls.push_back(base + archiveName);
+    }
+
+    m_downloader.Request(urls, archiveNames, skinName, DOWNLOAD_RESOURCE_TYPE_PLAYER_SKIN);
 }
 
 bool ZeldaOnlineClient::WritePacket(const ByteStream& data) {
@@ -774,10 +1494,9 @@ bool ZeldaOnlineClient::WritePacket(const ByteStream& data) {
     return true;
 }
 
-
 void ZeldaOnlineClient::SendSceneTrigger(const std::string& name, const ByteStream& payload) {
 
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
     ByteStream packet = newPacket(CLIENT_PACKET_SCENE_TRIGGER);
     packet << PackedUInt4(sceneKey);
     packet << PackedUInt1(0);
@@ -786,7 +1505,7 @@ void ZeldaOnlineClient::SendSceneTrigger(const std::string& name, const ByteStre
 }
 
 void ZeldaOnlineClient::SendRoomTrigger(const std::string& name, const ByteStream& payload) {
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
     ByteStream packet = newPacket(CLIENT_PACKET_SCENE_TRIGGER);
     packet << PackedUInt4(sceneKey);
     packet << PackedUInt1(1);
@@ -809,6 +1528,8 @@ void ZeldaOnlineClient::ProcessOutgoingPackets() {
 
     SendDataToRemote(toSend.Text(), (int)(toSend.Length()));
 }
+
+
 
 void ZeldaOnlineClient::OnIncomingData(const char* payload, int length) {
     recvBuffer.Write(payload, (unsigned int)(length));
@@ -841,55 +1562,45 @@ bool ZeldaOnlineClient::NextPacket(ByteStream& out) {
     return true;
 }
 
-static Actor* FindLocalHorse(Player* player) {
-    if ((player->stateFlags1 & PLAYER_STATE1_ON_HORSE) && player->rideActor != NULL &&
-        player->rideActor->id == ACTOR_EN_HORSE) {
-        return player->rideActor;
-    }
 
-    if (0) {
-        if (!Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED)) {
-            return NULL;
-        }
-    }
-    for (Actor* a = gPlayState->actorCtx.actorLists[ACTORCAT_BG].head; a != NULL; a = a->next) {
-        if (a->id == ACTOR_EN_HORSE && a->update != HorsePuppet_Update && ((EnHorse*)a)->type == HORSE_EPONA) {
-            return a;
-        }
-    }
-    return NULL;
-}
 
 void ZeldaOnlineClient::SendPacket_PlayerUpdate() {
     if (!isConnected || gPlayState == NULL) {
         return;
     }
 
-    Player* player = GET_PLAYER(gPlayState);
-    if (player == NULL) {
-        return;
+    if (gPlayState->actorCtx.actorLists[ACTORCAT_PLAYER].length > 0) {
+        Player* player = GET_PLAYER(gPlayState);
+        if (player == NULL) {
+            return;
+        }
+
+        ByteStream frame;
+        PlayerPuppetController::BuildLocalPlayerProperties(player, m_nickName, frame);
+
+        unsigned int changedCount = 0;
+        ByteStream delta =
+            AbstractActorController::DiffProperties(m_lastPlayerProps, frame, m_sendFullPlayerProps, &changedCount);
+        m_lastPlayerProps = frame;
+
+        m_sendFullPlayerProps = false;
+
+        if (delta.Length()) {
+            WritePacket(newPacket(CLIENT_PACKET_UPDATE_PLAYER) << delta);
+            ZNetworking::FlushSendBuffer();
+        }
     }
 
-    if (gPlayState->roomCtx.curRoom.num < 0) {
-        return;
-    }
+    
+}
 
-    auto horseActor = FindLocalHorse(player);
-
-    ByteStream frame;
-    PlayerPuppetController::BuildLocalPlayerProperties(player, horseActor, frame);
-
-    unsigned int changedCount = 0;
-    ByteStream delta =
-        AbstractActorController::DiffProperties(m_lastPlayerProps, frame, m_sendFullPlayerProps, &changedCount);
-    m_lastPlayerProps = frame;
-
-    if (m_sendFullPlayerProps)
-        DbgPrintf("Sent playe props full!\n");
-    m_sendFullPlayerProps = false;
-
-    if (delta.Length())
-        WritePacket(newPacket(CLIENT_PACKET_UPDATE_PLAYER) << delta);
+void ZeldaOnlineClient::DrawOverlay(GraphicsContext* gfxCtx) {
+    if (!isConnected)
+        DrawScreenText(gfxCtx, "Disconnected", 5, 5, { 255, 64, 64, 255 }, 0.5f);
+    else if (m_showConnectionStatusTimer > 0)
+        DrawScreenText(gfxCtx, "Connected", 5, 5, { 0, 255, 0, 255 }, 0.5f);
+    if (m_showConnectionStatusTimer > 0)
+        --m_showConnectionStatusTimer;
 }
 
 void ZeldaOnlineClient::UpdateAppearance() {
@@ -899,13 +1610,8 @@ void ZeldaOnlineClient::UpdateAppearance() {
 
     ByteStream blob;
     blob << PackedUInt1(LINK_IS_ADULT ? 0u : 1u);
-    blob << PackedUInt1((u8)(CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC)));
-    blob << PackedUInt1((u8)(CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS)));
-    blob << PackedUInt1((u8)(CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD)));
-    blob << PackedUInt1(gSaveContext.equips.buttonItems[0]);
-
-    std::string name = CVarGetString("gZeldaOnline.PlayerName", "Player");
-    blob << PackedUInt1((int)name.length()) << name;
+    blob << PackedUInt1((uint8_t)(m_skinRef.length())) << m_skinRef;
+    blob << PackedUInt1((uint8_t)m_nickName.length()) << m_nickName;
 
     if (blob.compare(m_lastAppearanceBlob) == 0)
         return;
@@ -915,8 +1621,71 @@ void ZeldaOnlineClient::UpdateAppearance() {
     WritePacket(newPacket(CLIENT_PACKET_UPDATE_APPEARANCE) << blob);
 }
 
+void ZeldaOnlineClient::NetworkHook() 
+{
+    ZNetworking::Poll();
+
+    if (--m_keepAliveTimer <= 0) {
+        m_keepAliveTimer = 3 * 20;
+        WritePacket(newPacket(CLIENT_PACKET_KEEP_ALIVE));
+    }
+    //Handle downloads
+    for (const DownloadResult& r : m_downloader.TakeCompleted()) {
+
+        //Load the new archive files
+        for (const DownloadedFile& file : r.files) {
+            if (!file.success) {
+                SPDLOG_WARN("download failed: {} ({})", file.fileName, file.error);
+                continue;
+            }
+
+            auto archive =
+                Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->AddArchive(file.filePath);
+            if (archive == nullptr) {
+                continue;
+            }
+
+            for (const auto& entry : *archive->ListFiles()) {
+                const std::string& rPath = entry.second;
+
+                std::vector<std::string> raw = StringHelper::Split(rPath, ".");
+                std::string ext = raw[raw.size() - 1];
+                std::string nPath = rPath.substr(0, rPath.size() - (ext.size() + 1));
+                std::replace(nPath.begin(), nPath.end(), '\\', '/');
+
+                ExtensionCache[nPath] = { rPath, ext };
+            }
+        }
+
+        if (r.type != DOWNLOAD_RESOURCE_TYPE_PLAYER_SKIN) {
+            continue;
+        }
+
+        //Reload the skin
+        PlayerSkin* reloaded = PlayerSkin_Reload(r.resourceName.c_str());
+
+        if (gPlayState == nullptr) {
+            continue;
+        }
+
+        //Reapply the skeleton to those who are using this skin
+        for (Actor* it = gPlayState->actorCtx.actorLists[ACTORCAT_PLAYER].head; it != nullptr; it = it->next) {
+            Player* p = (Player*)it;
+            if (p->skin == reloaded) {
+                Player_ReapplySkeleton(p, gPlayState);
+            }
+        }
+    }
+}
+
 void ZeldaOnlineClient::RegisterNetworkingHook(bool enabled) {
-    COND_HOOK(OnGameFrameUpdate, enabled, [&] { ZNetworking::Poll(); });
+    //ExecuteOnGameStateMainStart
+    COND_HOOK(OnGameStateMainStart, enabled, [this] {
+        this->NetworkHook();
+        
+    });
+
+    COND_HOOK(OnDrawOverlay, enabled, [&](GraphicsContext* gfxCtx) { DrawOverlay(gfxCtx); });
 }
 
 void ZeldaOnlineClient::RegisterHooks(bool enabled) {
@@ -924,50 +1693,40 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         return;
 
     m_hooksEnabled = enabled;
-    COND_HOOK(OnPlayDrawEnd, enabled,[&]() { SendPacket_PlayerUpdate(); });
+    COND_HOOK(OnPlayDrawEnd, enabled, [&]() { SendPacket_PlayerUpdate(); });
 
-    COND_HOOK(OnSceneInit, enabled,[&](int16_t) {
-        m_sceneLoadedAtNight = gSaveContext.nightFlag != 0;
-        UpdateAppearance();
-    });
 
-    COND_HOOK(OnTransitionEnd, enabled,[&](int16_t) {
+
+    COND_HOOK(OnTransitionEnd, enabled, [&](int16_t) {
         if (m_boundaryCueOnLoad != 0) {
             Sfx_PlaySfxCentered2(m_boundaryCueOnLoad == 1 ? NA_SE_EV_CHICKEN_CRY_M : NA_SE_EV_DOG_CRY_EVENING);
             m_boundaryCueOnLoad = 0;
         }
     });
 
-    COND_HOOK(OnGameFrameUpdate, enabled,[&] { OnGameFrameUpdate(); });
+    COND_HOOK(OnGameFrameUpdate, enabled, [&] { OnGameFrameUpdate(); });
 
-    COND_HOOK(OnActorKill, enabled,[&](void* refActor) {
+    COND_HOOK(OnActorKill, enabled, [&](void* refActor) {
         Actor* actor = static_cast<Actor*>(refActor);
 
         OnActorKill(actor);
     });
 
-    COND_HOOK(OnActorInit, enabled,[&](void* refActor) {
+
+    COND_HOOK(ShouldActorDelayInit, enabled, [&](void* refActor, bool* should) {
         Actor* actor = static_cast<Actor*>(refActor);
 
         if (actor->zoController) {
             auto controller = static_cast<AbstractActorController*>(actor->zoController);
-            if (controller->ShouldReinstateInit()) {
-                actor->init = controller->DispatchInit;
+            if (controller->ShouldDelayInit()) {
+                *should = true;
             }
         }
     });
 
-    COND_ID_HOOK(ShouldActorInit, ACTOR_PLAYER, enabled,[&](void* actorRef, bool*) {
-        if (!m_spawningPuppetPlayer) {
-            return;
-        }
 
-        Actor* actor = (Actor*)actorRef;
 
-        InitPuppetPlayer(actor);
-    });
-
-    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_HORSE, enabled,[&](void* actorRef, bool*) {
+    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_HORSE, enabled, [&](void* actorRef, bool*) {
         Actor* actor = (Actor*)actorRef;
         if (!(actor->params & ZO_HORSE_PUPPET)) {
             return;
@@ -978,19 +1737,8 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         actor->destroy = HorsePuppet_Destroy;
     });
 
-    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_RU1, enabled,[&](void* actorRef, bool*) {
-        Actor* actor = (Actor*)actorRef;
 
-        AbstractActorController::InstallCustomInit(actor, RutoController::EnRu1_Init);
-    });
-
-    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_FLOORMAS, enabled,[&](void* actorRef, bool*) {
-        Actor* actor = (Actor*)actorRef;
-
-        AbstractActorController::InstallCustomInit(actor, FloormasterController::EnFloormas_Init);
-    });
-
-    COND_HOOK(OnFlagSet, enabled,[&](s16 flagType, s16 flag) {
+    COND_HOOK(OnFlagSet, enabled, [&](s16 flagType, s16 flag) {
         if (flagType == FLAG_INF_TABLE || flagType == FLAG_EVENT_CHECK_INF) {
             printf("SENDING FLAG: %i:%i\n", flagType, int(flag));
             ByteStream packet = newPacket(CLIENT_PACKET_SCENE_FLAG);
@@ -1001,33 +1749,51 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         }
     });
 
-    COND_HOOK(OnSceneFlagSet, enabled,[&](s16 sceneNum, s16 flagType, s16 flag) {
-
+    COND_HOOK(OnSceneFlagSet, enabled, [&](s16 sceneNum, s16 flagType, s16 flag) {
         if (gPlayState == NULL || sceneNum != gPlayState->sceneNum) {
             return;
         }
-        if (flagType != FLAG_SCENE_SWITCH && flagType != FLAG_SCENE_CLEAR && flagType != FLAG_INF_TABLE) {
+        if (flagType != FLAG_SCENE_SWITCH && flagType != FLAG_SCENE_CLEAR && flagType != FLAG_INF_TABLE &&
+            flagType != FLAG_SCENE_TREASURE) {
             return;
         }
-        if (sceneNum == SCENE_WATER_TEMPLE && flagType == FLAG_SCENE_SWITCH &&
-            (flag == 0x1C || flag == 0x1D || flag == 0x1E))
-            return;
-        if (sceneNum == SCENE_FOREST_TEMPLE && flagType == FLAG_SCENE_SWITCH && flag == 0x1B)
-            return;
-        if (sceneNum == SCENE_GANONS_TOWER_COLLAPSE_EXTERIOR && flagType == FLAG_SCENE_SWITCH && flag == 0x36)
-            return;
 
-        if (m_lockedDoorFlags.contains(flag))
+        auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+
+        if (flagType == FLAG_SCENE_TREASURE) {
+            for (Actor* actor = gPlayState->actorCtx.actorLists[ACTORCAT_CHEST].head; actor != NULL; actor = actor->next) {
+                if (actor->id != ACTOR_EN_BOX || (actor->params & 0x1F) != flag) {
+                    continue;
+                }
+
+                EnBox* chest = (EnBox*)actor;
+                ByteStream packet = newPacket(CLIENT_PACKET_CHEST_OPENED);
+                packet << PackedUInt4(sceneKey);
+                packet << PackedInt1((gPlayState->roomCtx.curRoom.num));
+                packet << PackedUInt1((u8)(flag));
+                packet << PackedUInt2((u16)(chest->getItemEntry.modIndex));
+                packet << PackedUInt2((u16)(chest->getItemEntry.getItemId));
+                WritePacket(packet);
+                break;
+            }
             return;
+        }
+
+        u8 options = SCENE_FLAG_OPT_SET;
+        if (flagType == FLAG_SCENE_SWITCH && flag < 32 && (m_sceneLockedDoorFlags & (1u << flag)) != 0) {
+            options |= SCENE_FLAG_OPT_LOCKED_DOOR;
+        }
 
         ByteStream packet = newPacket(CLIENT_PACKET_SCENE_FLAG);
+        packet << PackedUInt4(sceneKey);
+        packet << PackedInt1((gPlayState->roomCtx.curRoom.num));
         packet << PackedUInt1((u8)(flagType));
         packet << PackedUInt2(flag);
-        packet << PackedUInt1(1u);
+        packet << PackedUInt1(options);
         WritePacket(packet);
     });
 
-    COND_HOOK(OnSceneFlagUnset, enabled,[&](s16 sceneNum, s16 flagType, s16 flag) {
+    COND_HOOK(OnSceneFlagUnset, enabled, [&](s16 sceneNum, s16 flagType, s16 flag) {
         if (gPlayState == NULL || sceneNum != gPlayState->sceneNum)
             return;
         if (flagType != FLAG_SCENE_SWITCH && flagType != FLAG_SCENE_CLEAR)
@@ -1046,14 +1812,31 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
 
         if (enabled) {
             GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnVanillaBehavior>(
-                VB_ADVANCE_DAYTIME, [this](GIVanillaBehavior, bool* should, va_list) {
-                    *should = false;
-                });
+                VB_ADVANCE_DAYTIME, [this](GIVanillaBehavior, bool* should, va_list) { *should = false; });
         }
     }
 
-    COND_HOOK(OnTransitionRoom, enabled,[&]() {
-        gPlayState->actorCtx.flags.tempSwch |= m_currentRoomTempMask;
+    COND_HOOK(OnPlayPostInit, enabled, [&](int16_t sceneNum) { OnSceneInited(sceneNum); });
+
+    COND_HOOK(OnSceneLoad, enabled, [&](int16_t sceneNum) {
+        m_reloadPending = false;
+        if (!ShouldFreezeTime(sceneNum, GetSceneVariant(sceneNum)))
+            gSaveContext.skyboxTime = gSaveContext.dayTime = m_serverDayTime;
+
+        
+        if (((void)0, gSaveContext.dayTime) > 0xC000 || ((void)0, gSaveContext.dayTime) < 0x4555) {
+            ((void)0, gSaveContext.nightFlag = 1);
+        } else {
+            ((void)0, gSaveContext.nightFlag = 0);
+        }
+   
+
+    });
+
+
+
+
+    COND_HOOK(OnTransitionRoom, enabled, [&]() {
 
         printf("ON TRANSITION SCENE: Current Room: %i\nLast Room: %i\nCurrent Scene: %i\nLast Scene: %i\n",
                gPlayState->roomCtx.curRoom.num, m_lastRoom, gPlayState->sceneNum, m_lastScene);
@@ -1061,30 +1844,39 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         RequestRoomSceneChange(true);
     })
 
-    COND_HOOK(OnSceneInit, enabled,[&](int) {
-        printf("ON TRANSITION SCENE: Current Room: %i\nLast Room: %i\nCurrent Scene: %i\nLast Scene: %i\n",
-               gPlayState->roomCtx.curRoom.num, m_lastRoom, gPlayState->sceneNum, m_lastScene);
-        RequestRoomSceneChange(false);
+
+
+
+    COND_HOOK(ShouldLoadSetupActors, enabled, [&](bool* should) {
+        if (m_blockSceneSetupActors >= 0)
+            *should = false;
     });
 
-    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_DOOR, enabled,[&](void* refActor, bool*) {
+    COND_ID_HOOK(ShouldActorInit, ACTOR_EN_DOOR, enabled, [&](void* refActor, bool*) {
         Actor* door = static_cast<Actor*>(refActor);
         s32 doorType = (door->params >> 7) & 7;
         if (doorType == DOOR_LOCKED) {
-            m_lockedDoorFlags.insert(door->params & 0x3F);
+            m_sceneLockedDoorFlags |= 1U << (door->params & 0x3F);
+
         }
     });
 
-    COND_HOOK(OnSceneInit, enabled,[&](int16_t sceneNum) { m_lockedDoorFlags.clear(); });
+    COND_ID_HOOK(ShouldActorInit, ACTOR_DOOR_SHUTTER, enabled, [&](void* refActor, bool*) {
+        Actor* shutter = static_cast<Actor*>(refActor);
+        s32 doorType = (shutter->params >> 6) & 0xF;
+        if (doorType == SHUTTER_KEY_LOCKED || doorType == SHUTTER_BOSS) {
+            m_sceneLockedDoorFlags |= 1U << (shutter->params & 0x3F);
+        }
+    });
 
-    COND_HOOK(OnPlayerSfx, enabled,[&](u16 sfxId) {
+    COND_HOOK(OnPlayerSfx, enabled, [&](u16 sfxId) {
         if (gPlayState == nullptr) {
             return;
         }
         TransmitActorSound(m_myNetworkID, sfxId);
     });
 
-    COND_HOOK(OnOcarinaNote, enabled,[&](u8 note, f32 modulator, s8 bend) {
+    COND_HOOK(OnOcarinaNote, enabled, [&](u8 note, f32 modulator, s8 bend) {
         ByteStream p = newPacket(CLIENT_PACKET_OCARINA_SFX);
         p << PackedUInt2(m_myNetworkID);
         p << PackedUInt1(note);
@@ -1093,8 +1885,7 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         WritePacket(p);
     });
 
-    COND_HOOK(OnMinimapDrawCompassIcons, enabled,[&]() {
-
+    COND_HOOK(OnMinimapDrawCompassIcons, enabled, [&]() {
         struct CompassIcon {
             Vec3f pos;
             Vec3s rot;
@@ -1103,11 +1894,7 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         };
         std::vector<CompassIcon> compassIcons;
 
-        bool isInDungeon = gPlayState->sceneNum == SCENE_DEKU_TREE || gPlayState->sceneNum == SCENE_DODONGOS_CAVERN ||
-                           gPlayState->sceneNum == SCENE_JABU_JABU || gPlayState->sceneNum == SCENE_FOREST_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_FIRE_TEMPLE || gPlayState->sceneNum == SCENE_WATER_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_SPIRIT_TEMPLE || gPlayState->sceneNum == SCENE_SHADOW_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_BOTTOM_OF_THE_WELL || gPlayState->sceneNum == SCENE_ICE_CAVERN;
+        bool isInDungeon = IsDungeonScene(gPlayState->sceneNum);
 
         s8 displayedRoomNum =
             gPlayState->roomCtx.prevRoom.num >= 0 ? gPlayState->roomCtx.prevRoom.num : gPlayState->roomCtx.curRoom.num;
@@ -1121,8 +1908,8 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
                 continue;
 
             Actor* actor = playerController->GetActor();
-            compassIcons.push_back(CompassIcon{ actor->world.pos, actor->shape.rot, 0.3f,
-                                                playerController->GetTunicColour() });
+            compassIcons.push_back(
+                CompassIcon{ actor->world.pos, actor->shape.rot, 0.3f, playerController->GetTunicColour() });
         }
 
         Player* player = GET_PLAYER(gPlayState);
@@ -1233,9 +2020,6 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
 
 void ZeldaOnlineClient::OnActorKill(Actor* actor) {
 
-    if (actor->id == ACTOR_EN_RU1) {
-        printf("BREAK\n");
-    }
     if (actor->zoController == nullptr || gZeldaOnlineEngineCleanup) {
         return;
     }
@@ -1244,6 +2028,8 @@ void ZeldaOnlineClient::OnActorKill(Actor* actor) {
         return;
     }
 
+    //Push our properties before the kill command
+    controller->SendUpdate();
     SendActorDied(controller->NetworkID());
 }
 
@@ -1258,50 +2044,77 @@ void ZeldaOnlineClient::ReportBandwidth() {
     m_bytesSent = 0;
     m_bytesReceived = 0;
 
-    printf("[ZeldaOnline] bandwidth: up %.2f KB/s (%llu B)  down %.2f KB/s (%llu B)\n", sent / 1024.0, static_cast<unsigned long long>(sent), received / 1024.0, static_cast<unsigned long long>(received));
+    printf("[ZeldaOnline] bandwidth: up %.2f KB/s (%llu B)  down %.2f KB/s (%llu B)\n", sent / 1024.0,
+           static_cast<unsigned long long>(sent), received / 1024.0, static_cast<unsigned long long>(received));
 }
 
 void ZeldaOnlineClient::OnGameFrameUpdate() {
+    if (gPlayState == nullptr)
+        return;
 
-     ReportBandwidth();
-    if (m_hasWorldTime && gPlayState != NULL) {
-        u16 rate = m_serverTimeRate / 20;
-        u16 next = (u16)(gSaveContext.dayTime + rate);
-        if (gSaveContext.dayTime > (u16)(0xFFFF - rate)) {
-            gSaveContext.dayTime = 0xFFFF;
-        } else if (IsNightTime(gSaveContext.dayTime) != IsNightTime(next)) {
-        } else {
-            gSaveContext.dayTime = next;
-        }
-        gSaveContext.skyboxTime = gSaveContext.dayTime;
+    auto localPlayer = GET_PLAYER(gPlayState);
 
-        if (m_sceneLoadedAtNight != IsNightTime(m_serverDayTime) && IsDayNightReloadScene(gPlayState->sceneNum)) {
-            m_reloadPending = true;
-        }
+   // ReportBandwidth();
+    if (m_hasWorldTime) {
+        int sceneVariant = GetSceneVariant(gPlayState->sceneNum);
 
-        if (m_reloadPending && IsDayNightReloadScene(gPlayState->sceneNum) && CanReloadSceneNow(gPlayState)) {
-            gSaveContext.skyboxTime = gSaveContext.dayTime = m_serverDayTime;
-            m_boundaryCueOnLoad = IsNightTime(m_serverDayTime) ? 2 : 1;
-            m_reloadPending = false;
-            ReloadSceneInPlace(gPlayState);
+        if (!ShouldFreezeTime(gPlayState->sceneNum, sceneVariant)) {
+            u16 rate = m_serverTimeRate / 20;
+            u16 next = (u16)(gSaveContext.dayTime + rate);
+            if (gSaveContext.dayTime > (u16)(0xFFFF - rate)) {
+                gSaveContext.dayTime = 0xFFFF;
+            } else if (IsNightTime(gSaveContext.dayTime) != IsNightTime(next)) {
+            } else {
+                gSaveContext.dayTime = next;
+            }
+            gSaveContext.skyboxTime = gSaveContext.dayTime;
+
+            if (m_sceneLoadedAtNight != IsNightTime(m_serverDayTime) &&
+                IsDayNightReloadScene(gPlayState->sceneNum, sceneVariant)) {
+                m_reloadPending = true;
+            }
+
+            if (m_reloadPending && IsDayNightReloadScene(gPlayState->sceneNum, sceneVariant) &&
+                CanReloadSceneNow(gPlayState)) {
+                gSaveContext.skyboxTime = gSaveContext.dayTime = m_serverDayTime;
+                m_boundaryCueOnLoad = IsNightTime(m_serverDayTime) ? 2 : 1;
+                m_reloadPending = false;
+                printf("RELOADING\n");
+                ReloadSceneInPlace(gPlayState);
+            }
         }
     }
 
-    u8 paused = (gPlayState != NULL && (gPlayState->pauseCtx.state != 0 || gPlayState->msgCtx.msgMode != MSGMODE_NONE)) ? 1 : 0;
 
-    if (paused != m_wasPaused) {
-
-        WritePacket(newPacket(CLIENT_PACKET_SET_PAUSE_STATE) << PackedUInt1(paused));
-        m_wasPaused = paused;
+    if (m_removeNametagTimer > 0)
+    {
+        if (--m_removeNametagTimer == 0)
+        {
+            NameTag_RemoveAllForActor(&GET_PLAYER(gPlayState)->actor);
+        }
     }
 
-    if (paused) {
+    if (m_clearPlayerListStatusTimer > 0)
+    {
+        if (--m_clearPlayerListStatusTimer == 0) {
+            ZeldaOnlineRoomWindow::Instance->SetStatus("");
+        }
+    }
+
+    u8 simulationPaused = ((gPlayState->pauseCtx.state != 0) || (localPlayer->stateFlags1 & (PLAYER_STATE1_TALKING | PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_ITEM_CS))) ? 1 : 0;
+
+    if (simulationPaused != m_wasSimulationPaused) {
+        WritePacket(newPacket(CLIENT_PACKET_SET_PAUSE_STATE) << PackedUInt1(simulationPaused));
+        m_wasSimulationPaused = simulationPaused;
+    }
+
+    if (simulationPaused) {
         ByteStream release;
         int count = 0;
 
         for (auto& entry : m_networkedActors) {
             AbstractActorController* c = entry.second;
-            if (c->IsLeader() && c->CanRelinquishLeadership()) {
+            if (!c->IsPlayer() && c->IsLeader() && ((gPlayState->pauseCtx.state != 0) || c->CanRelinquishLeadership())) {
                 release << PackedUInt2((unsigned int)(c->NetworkID()));
                 count++;
                 c->SetLeader(false);
@@ -1318,8 +2131,8 @@ void ZeldaOnlineClient::OnGameFrameUpdate() {
 
     UpdateAppearance();
 
-    if (0) {
-        if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl)) {
+    if (false) {
+        if (ImGui::IsKeyDown(ImGuiKey_T)) {
             for (auto& entry : m_networkedActors) {
                 AbstractActorController* c = entry.second;
                 if (!c->IsPlayer())
@@ -1366,20 +2179,103 @@ void ZeldaOnlineClient::OnGameFrameUpdate() {
                 break;
             }
         }
-    }
 
-    m_currentFrame++;
+        // O -- save the current spot to zo_warp.txt
+        if (ImGui::IsKeyDown(ImGuiKey_O)) {
+            Player* player = gPlayState != nullptr ? GET_PLAYER(gPlayState) : nullptr;
+            if (player != nullptr) {
+                s16 playerParams;
+                if (gPlayState->roomCtx.curRoom.behaviorType2 < 4) {
+                    playerParams = 0x0DFF;
+                } else {
+                    playerParams = 0x0D00 | GET_ACTIVE_CAM(gPlayState)->camDataIdx;
+                }
+
+                FILE* f = fopen("zo_warp.txt", "w");
+                if (f != nullptr) {
+                    fprintf(f, "%d %d %d %.3f %.3f %.3f %d %d\n", gPlayState->sceneNum, gSaveContext.entranceIndex,
+                            gPlayState->roomCtx.curRoom.num, player->actor.world.pos.x, player->actor.world.pos.y,
+                            player->actor.world.pos.z, player->actor.shape.rot.y, playerParams);
+                    fclose(f);
+                    SPDLOG_INFO("[ZeldaOnline] warp point saved");
+                }
+            }
+        }
+
+        // L -- warp to whatever O last saved
+        if (ImGui::IsKeyDown(ImGuiKey_L)) {
+            FILE* f = fopen("zo_warp.txt", "r");
+            if (f != nullptr) {
+                int sceneNum, entranceIndex, roomIndex, yaw, playerParams;
+                float x, y, z;
+
+                if (fscanf(f, "%d %d %d %f %f %f %d %d", &sceneNum, &entranceIndex, &roomIndex, &x, &y, &z, &yaw,
+                           &playerParams) == 8) {
+
+                    gSaveContext.respawnFlag = 1;
+                    gPlayState->nextEntranceIndex = entranceIndex;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = entranceIndex;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = roomIndex;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].pos.x = x;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].pos.y = y;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].pos.z = z;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = (s16)yaw;
+                    gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = (s16)playerParams;
+
+                    gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+                    gPlayState->transitionType = TRANS_TYPE_INSTANT;
+                    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
+
+                    static int warpHookId = 0;
+                    warpHookId = REGISTER_VB_SHOULD(VB_INFLICT_VOID_DAMAGE, {
+                        *should = false;
+                        GameInteractor::Instance->UnregisterGameHookForID<GameInteractor::OnVanillaBehavior>(
+                            warpHookId);
+                    });
+                }
+                fclose(f);
+            }
+        }
+    }
 }
 
 void ZeldaOnlineClient::InitPuppetPlayer(Actor* actor) {
     RelinkPuppetBehindPlayer(actor);
 
-    actor->id = ACTOR_EN_OE2;
-    actor->init = PlayerPuppet_Init;
-    actor->update = PlayerPuppet_Update;
-    actor->draw = PlayerPuppet_Draw;
-    actor->destroy = PlayerPuppet_Destroy;
+    //actor->id = ACTOR_EN_OE2;
+    actor->init = PlayerPuppetController::PuppetInit;
+    actor->update = PlayerPuppetController::PuppetUpdate;
+    actor->draw = PlayerPuppetController::PuppetDraw;
+    actor->destroy = PlayerPuppetController::PuppetDestroy;
 }
+
+void ZeldaOnlineClient::OnSceneInited(int sceneNum) {
+    m_sceneLoadedAtNight = gSaveContext.nightFlag != 0;
+    m_sceneLockedDoorFlags = 0U;
+    m_savedSwch = 0U;
+    m_blockSceneSetupActors = -1;
+
+
+    UpdateAppearance();
+    printf("ON TRANSITION SCENE: Current Room: %i\nLast Room: %i\nCurrent Scene: %i\nLast Scene: %i\n",
+           gPlayState->roomCtx.curRoom.num, m_lastRoom, gPlayState->sceneNum, m_lastScene);
+    RequestRoomSceneChange(false);
+
+
+
+    if (!isConnected || !IsDungeonScene(sceneNum)) {
+        return;
+    }
+    printf("BLOCKING SETUP ACTORS\n");
+    m_blockSceneSetupActors = sceneNum;
+    SavedSceneFlags* saved = &gSaveContext.sceneFlags[sceneNum];
+
+    m_savedSwch = saved->swch;
+
+    saved->swch = 0;
+    saved->clear = 0;
+}
+
 
 Actor* ZeldaOnlineClient::RequestSpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                                             s16 params) {
@@ -1393,9 +2289,17 @@ Actor* ZeldaOnlineClient::RequestSpawnActor(s16 actorId, f32 posX, f32 posY, f32
                                  posY, posZ, rotX, rotY, rotZ, params, 0);
     }
 
+    auto& dbEntry = ActorDB::Instance->RetrieveEntry(actorId).entry;
+
+    if (dbEntry.valid) {
+        if (dbEntry.category == ACTORCAT_ENEMY && Flags_GetClear(gPlayState, gPlayState->roomCtx.curRoom.num)) {
+            return nullptr;
+        }
+    }
+
     SPDLOG_DEBUG("[ZeldaOnline] networked request spawn request: actor {:#06x}", actorId);
 
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
 
     ByteStream packet = newPacket(CLIENT_PACKET_REQUEST_ACTOR_SPAWN);
     packet << PackedUInt4(sceneKey);
@@ -1413,9 +2317,18 @@ Actor* ZeldaOnlineClient::RequestSpawnActor(s16 actorId, f32 posX, f32 posY, f32
 
 Actor* ZeldaOnlineClient::RequestSpawnActorAsChild(AbstractActorController* parent, s16 actorId, f32 posX, f32 posY,
                                                    f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params) {
+
+    auto& dbEntry = ActorDB::Instance->RetrieveEntry(actorId).entry;
+
+    if (dbEntry.valid) {
+        if (dbEntry.category == ACTORCAT_ENEMY && Flags_GetClear(gPlayState, gPlayState->roomCtx.curRoom.num)) {
+            return nullptr;
+        }
+    }
+
     SPDLOG_DEBUG("[ZeldaOnline] networked request spawn as child request: actor {:#06x}", actorId);
 
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
 
     ByteStream packet = newPacket(CLIENT_PACKET_REQUEST_ACTOR_SPAWN_AS_CHILD);
     packet << PackedUInt4(sceneKey);
@@ -1436,13 +2349,15 @@ static bool IsClusterDedupActor(s16 actorId) {
     return actorId == ACTOR_EN_ISHI || actorId == ACTOR_EN_KUSA;
 }
 
+
 Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                                      s16 params) {
     if (gPlayState == nullptr)
         return nullptr;
 
-    if (!isConnected || gPlayState->roomCtx.curRoom.num < 0 ||
-        !ActorControllerFactory::Instance().IsNetworked(actorId, params)) {
+
+
+    if (!isConnected || !ActorControllerFactory::Instance().IsNetworked(actorId, params)) {
 
         auto currentExecutingController = AbstractActorController::CurrentLeaderContext();
         if (currentExecutingController != nullptr &&
@@ -1450,6 +2365,18 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
             SendRoomTrigger("spawn", ByteStream() << PackedUInt2(actorId) << PackedFloat4(posX) << PackedFloat4(posY)
                                                   << PackedFloat4(posZ) << PackedInt2(rotX) << PackedInt2(rotY)
                                                   << PackedInt2(rotZ) << PackedInt2(params));
+        }
+
+        if (actorId == ACTOR_DOOR_WARP1 || actorId == ACTOR_ITEM_B_HEART) {
+            WritePacket(newPacket(CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART)
+                        << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0,
+                                                    GetSceneVariant(gPlayState->sceneNum)))
+                        << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2((u16)(actorId))
+                        << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
+                        << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
+
+            return Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ,
+                                     posX, posY, posZ, rotX, rotY, rotZ, params, 0);
         }
 
         return Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX,
@@ -1467,18 +2394,28 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
 
     if (currentExecutingController != nullptr && currentExecutingController->GetActor()->init != nullptr &&
         !currentExecutingController->IsCreator()) {
+
+        //Init calls are called by both leaders and puppets
+        //If we are inside "init", only the actors "creator" is allowed to spawn
         return nullptr;
     }
 
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
-    Actor* actor = Actor_SpawnDirect(
-        &gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX, posY, posZ, rotX, rotY,
-        rotZ, params, 1);
+    bool instantSpawn = actorId == ACTOR_EN_BOM || actorId == ACTOR_EN_BOMBF || actorId == ACTOR_EN_BOM_CHU;
 
+
+    Actor* actor = Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ,
+                                     posX, posY, posZ, rotX, rotY, rotZ, params, !instantSpawn);
+
+    if (actor == nullptr)
+        return nullptr;
+
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
     actor->zoLocalId = m_nextLocalID++;
 
-    AbstractActorController* controller = actorId != ACTOR_EN_BOM ? ActorControllerFactory::Instance().Create(actorId, actor, 0, (int)(sceneKey), gPlayState->roomCtx.curRoom.num, true) : nullptr;
+    AbstractActorController* controller = !instantSpawn ? ActorControllerFactory::Instance().Create(actorId, actor, 0, (int)(sceneKey), gPlayState->roomCtx.curRoom.num, true)
+                      : nullptr;
 
+    //No controller means the actor runs straight through its normal init process ASAP. A controller will mean it waits until network ID arrives
     if (controller) {
         controller->SetCreator(true);
     }
@@ -1492,6 +2429,8 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
     packet << PackedInt2(params);
     packet << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ);
     packet << PackedInt2(rotX) << PackedInt2(rotY) << PackedInt2(rotZ);
+    auto* ctx = AbstractActorController::CurrentLeaderContext();
+    packet << PackedUInt2(ctx != nullptr ? (unsigned int)(ctx->NetworkID()) : 0u);
 
     WritePacket(packet);
 
@@ -1502,6 +2441,16 @@ Actor* ZeldaOnlineClient::SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX
                                             s16 rotY, s16 rotZ, s16 params) {
     if (gPlayState == nullptr)
         return nullptr;
+
+    if (actorId == ACTOR_DOOR_WARP1 || actorId == ACTOR_ITEM_B_HEART) {
+        WritePacket(newPacket(CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART)
+                    << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum)))
+                    << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2((u16)(actorId))
+                    << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
+                    << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
+
+        return Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parent, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX, posY, posZ, rotX, rotY, rotZ, params, 0);
+    }
 
     bool shouldNotNetworkSpawn = !ActorControllerFactory::Instance().IsNetworked(actorId, params) || !isConnected ||
                                  gPlayState->roomCtx.curRoom.num < 0;
@@ -1528,9 +2477,12 @@ Actor* ZeldaOnlineClient::SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX
             return RequestSpawnActor(actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
         }
     }
-
-    Actor* actor = Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parent, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX, posY, posZ, rotX, rotY, rotZ, params, shouldNotNetworkSpawn ? 0 : 1);
-
+    bool instantSpawn = actorId == ACTOR_EN_BOM || actorId == ACTOR_EN_BOMBF || actorId == ACTOR_EN_BOM_CHU;
+    Actor* actor =
+        Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parent, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ,
+                                 posX, posY, posZ, rotX, rotY, rotZ, params, shouldNotNetworkSpawn ? 0 : 1);
+    if (actor == nullptr)
+        return nullptr;
     if (shouldNotNetworkSpawn) {
         auto currentExecutingController = AbstractActorController::CurrentLeaderContext();
         if (currentExecutingController != nullptr &&
@@ -1544,9 +2496,15 @@ Actor* ZeldaOnlineClient::SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX
         return actor;
     }
 
-    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant());
+    //for bombchu, params = 1 means its OUR bombchu. So after we create it on our end, the others will receive params 0. This
+    //Is required to stop remotebombchu from attaching to other players bombchu
+    if (actorId == ACTOR_EN_BOM_CHU)
+        params = 0;
 
-    AbstractActorController* controller = actorId != ACTOR_EN_BOM ? ActorControllerFactory::Instance().Create(actorId, actor, 0, (int)(sceneKey), gPlayState->roomCtx.curRoom.num, true) : nullptr;
+    auto sceneKey = MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+
+
+    AbstractActorController* controller = !instantSpawn ? ActorControllerFactory::Instance().Create(actorId, actor, 0, (int)(sceneKey), gPlayState->roomCtx.curRoom.num, true) : nullptr;
 
     if (controller) {
         controller->SetCreator(true);
@@ -1574,14 +2532,18 @@ Actor* ZeldaOnlineClient::SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX
     packet << PackedUInt4(sceneKey);
     packet << PackedInt1(gPlayState->roomCtx.curRoom.num);
 
-    if (parentID != 0)
+    if (packetType == CLIENT_PACKET_ACTOR_SPAWN_AS_CHILD) {
         packet << PackedUInt2((u16)(parentID));
+        packet << PackedUInt4(parent->zoLocalId);
+    }
 
     packet << PackedUInt2((u16)(actorId));
     packet << PackedUInt4((u32)(actor->zoLocalId));
     packet << PackedInt2(params);
     packet << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ);
     packet << PackedInt2(rotX) << PackedInt2(rotY) << PackedInt2(rotZ);
+    auto* ctx = AbstractActorController::CurrentLeaderContext();
+    packet << PackedUInt2(ctx != nullptr ? (unsigned int)(ctx->NetworkID()) : 0u);
 
     WritePacket(packet);
 
@@ -1594,6 +2556,8 @@ bool ZeldaOnlineClient::RequestRoomSceneChange(bool roomTransition) {
 
     if (!roomTransition) {
         UpdateAppearance();
+
+
     }
 
     m_lastRoom = gPlayState->roomCtx.curRoom.num;
@@ -1602,10 +2566,31 @@ bool ZeldaOnlineClient::RequestRoomSceneChange(bool roomTransition) {
     ByteStream packet = newPacket(CLIENT_PACKET_SET_ROOM_SCENE);
     packet << PackedUInt2((u16)(gPlayState->sceneNum));
     packet << PackedUInt1(LINK_IS_ADULT ? 1u : 0u);
-    packet << PackedUInt2((u16)(GetSceneVariant()));
+    packet << PackedUInt2((u16)(GetSceneVariant(gPlayState->sceneNum)));
     packet << PackedInt1((s8)(roomIndex));
+    packet << PackedInt4(gSaveContext.entranceIndex);
     packet << PackedUInt1(roomTransition ? 1u : 0u);
-    return WritePacket(packet);
+
+    if (!roomTransition)
+    {
+        packet << PackedUInt4(gSaveContext.sceneFlags[gPlayState->sceneNum].swch);
+        packet << PackedUInt4(gSaveContext.sceneFlags[gPlayState->sceneNum].clear);
+        if (gPlayState->actorCtx.actorLists[ACTORCAT_PLAYER].length > 0)
+        {
+            Player* player = GET_PLAYER(gPlayState);
+            ByteStream frame;
+            PlayerPuppetController::BuildLocalPlayerProperties(player, m_nickName, frame);
+
+            unsigned int changedCount = 0;
+            ByteStream delta =
+                AbstractActorController::DiffProperties(m_lastPlayerProps, frame, m_sendFullPlayerProps, &changedCount);
+            m_lastPlayerProps = frame;
+            m_sendFullPlayerProps = false;
+            packet << delta;
+        }
+    }
+    WritePacket(packet);
+    return true;
 }
 
 Actor* ZeldaOnlineClient::FindExistingActor(s16 actorId, s16 params, int category, f32 homeX, f32 homeZ) {
@@ -1621,13 +2606,10 @@ Actor* ZeldaOnlineClient::FindExistingActor(s16 actorId, s16 params, int categor
     return nullptr;
 }
 
-void ZeldaOnlineClient::SendActorDied(int actorID) {
-    if (actorID == 0)
-    {
-        DbgPrintf("Break\n");
-    }
+
+void ZeldaOnlineClient::SendActorDied(int networkID) {
     ByteStream packet = newPacket(CLIENT_PACKET_ACTOR_DIED);
-    packet << PackedUInt2((u16)(actorID));
+    packet << PackedUInt2((u16)(networkID));
     WritePacket(packet);
 }
 
@@ -1652,22 +2634,64 @@ void ZeldaOnlineClient::DetachAndKill(AbstractActorController* controller) {
     if (controller == nullptr) {
         return;
     }
-    auto runningLocal = controller->IsRunningLocally();
+
+    bool isRunningLocally = controller->IsRunningLocally();
     Actor* actor = controller->Detach();
     RemoveNetworkedActor(controller->NetworkID(), controller);
     delete controller;
 
-    if (!runningLocal && actor != nullptr && actor->update != nullptr) {
+    if (actor == nullptr) {
+        return;
+    }
+
+
+    if (!isRunningLocally && actor->update != nullptr) {
         gZeldaOnlineEngineCleanup = true;
         Actor_Kill(actor);
         gZeldaOnlineEngineCleanup = false;
     }
 }
+
+std::vector<std::string> MissingArchives(const std::vector<std::string>& archiveNames) {
+    std::unordered_set<std::string> loaded;
+
+    auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
+    if (archives != nullptr) {
+        for (const auto& archive : *archives) {
+            if (archive == nullptr) {
+                continue;
+            }
+
+            const std::string& path = archive->GetPath();
+            size_t slash = path.find_last_of("/\\");
+            std::string base = (slash == std::string::npos) ? path : path.substr(slash + 1);
+
+            std::transform(base.begin(), base.end(), base.begin(), ::tolower);
+            loaded.insert(base);
+        }
+    }
+
+    std::vector<std::string> missing;
+    for (const std::string& name : archiveNames) {
+        std::string key = name;
+        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+
+        if (loaded.count(key) == 0) {
+            missing.push_back(name);
+        }
+    }
+
+    return missing;
 }
+
+} // namespace ZeldaOnline
 
 extern "C" Actor* ZeldaOnlineClient_SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                                                s16 params) {
-
+    if (actorId == ACTOR_BOSS_GANON || actorId == ACTOR_BOSS_GANON2)
+    {
+        printf("break\n");
+    }
     auto instance = ZeldaOnline::ZeldaOnlineClient::Instance;
 
     if (gMapLoading)
@@ -1678,7 +2702,9 @@ extern "C" Actor* ZeldaOnlineClient_SpawnActor(s16 actorId, f32 posX, f32 posY, 
 
 extern "C" Actor* ZeldaOnlineClient_SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX, f32 posY, f32 posZ,
                                                       s16 rotX, s16 rotY, s16 rotZ, s16 params) {
-
+    if (actorId == ACTOR_BOSS_GANON || actorId == ACTOR_BOSS_GANON2) {
+        printf("break\n");
+    }
     auto instance = ZeldaOnline::ZeldaOnlineClient::Instance;
     return instance->SpawnActorAsChild(parent, actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
 }
@@ -1687,4 +2713,12 @@ extern "C" int ZeldaOnlineClient_RequestRoomSceneChange(int freshLoad) {
 
     auto instance = ZeldaOnline::ZeldaOnlineClient::Instance;
     return 0;
+}
+
+extern "C" const char* ZeldaOnline_LocalSkinName() {
+    auto* client = ZeldaOnline::ZeldaOnlineClient::Instance;
+    if (client == nullptr || !client->isConnected) {
+        return "";
+    }
+    return client->LocalSkinName().c_str();
 }

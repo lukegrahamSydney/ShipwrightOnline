@@ -8,7 +8,7 @@
 #if defined(_WIN32) || defined(WIN32)
 #include <winsock2.h>
 #include <WS2tcpip.h>
-
+#include <mstcpip.h>
 #undef EWOULDBLOCK
 #define EWOULDBLOCK WSAEWOULDBLOCK
 
@@ -62,6 +62,7 @@ bool soxTcpConnected(SoxHandle socketId);
 
 void soxEnableNagle(SoxHandle socketId);
 void soxDisableNagle(SoxHandle socketId);
+void soxEnableKeepAlive(SoxHandle socketId);
 
 bool soxBindUdpPort(SoxHandle socketId, int port, int family);
 int soxUdpWrite(SoxHandle socketId, const char* data, size_t len, struct sockaddr_in6* addrIP, int port);

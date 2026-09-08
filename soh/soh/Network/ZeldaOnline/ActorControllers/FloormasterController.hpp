@@ -51,6 +51,16 @@ class FloormasterController : public AbstractActorController {
   public:
     using AbstractActorController::AbstractActorController;
 
+
+    static void RegisterHooks(s16 actorID, bool enabled) {
+        COND_ID_HOOK(ShouldActorInit, ACTOR_EN_FLOORMAS, enabled, [&](void* actorRef, bool*) {
+            Actor* actor = (Actor*)actorRef;
+
+            AbstractActorController::InstallCustomInit(actor, FloormasterController::EnFloormas_Init);
+        });
+
+    }
+
     EnFloormas* Typed() const {
         return reinterpret_cast<EnFloormas*>(m_actor);
     }
@@ -350,7 +360,7 @@ class FloormasterController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (Typed()->actionFunc == EnFloormas_SmShrink && !IsRunningLocally()) {
+        if (Typed()->actionFunc == EnFloormas_SmShrink) {
             EnFloormas_SetupSmShrink(Typed(), gPlayState);
             GoLocal();
         }
@@ -407,13 +417,13 @@ class FloormasterController : public AbstractActorController {
 
         if (!IsHoldingSomeone()) {
             if (fm->collider.base.acFlags & AC_HIT) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 return;
             }
 
             if (fm->actor.xzDistToPlayer < 400.0f && IsLocalPlayerClosest())
-                ClaimLeadership(CLAIM_REASON_PROXIMITY);
+                ClaimLeadership(CLAIM_REASON_COOLDOWN);
         }
         fm->collider.base.acFlags &= ~AC_HIT;
         fm->collider.base.atFlags &= ~AT_HIT;

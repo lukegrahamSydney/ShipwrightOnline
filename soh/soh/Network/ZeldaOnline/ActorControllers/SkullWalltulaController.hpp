@@ -203,7 +203,7 @@ class SkullWalltulaController : public AbstractActorController {
         if (changed & (1ull << PROP_BASIS))
             RebuildOrientation();
 
-        if (Typed()->actionFunc == func_80B0D590 && !IsRunningLocally())
+        if (Typed()->actionFunc == func_80B0D590)
             GoLocal();
     }
 
@@ -217,13 +217,13 @@ class SkullWalltulaController : public AbstractActorController {
         UpdateAnimation(&sw->skelAnime, LOCK_CUR_FRAME);
 
         if (sw->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         if (!IsGoldSkulltula() && sw->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         RegisterColliderBase(play, &sw->collider.base, CurrentColliderRoles());
     }

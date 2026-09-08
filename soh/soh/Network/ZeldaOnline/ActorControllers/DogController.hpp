@@ -38,9 +38,8 @@ class DogController : public AbstractActorController {
     static constexpr s16 BEHAVIOR_BOW_2 = 6;
     static constexpr s16 BEHAVIOR_FORCE_REISSUE = -1;
 
-    using DogActionFunc = void (*)(EnDog*, PlayState*);
-    static const DogActionFunc* ActionTable(size_t* count) {
-        static const DogActionFunc sTable[] = {
+    static const EnDogActionFunc* ActionTable(size_t* count) {
+        static const EnDogActionFunc sTable[] = {
             EnDog_Wait,
             EnDog_ChooseMovement,
             EnDog_FollowPath,
@@ -54,7 +53,7 @@ class DogController : public AbstractActorController {
 
     u8 CurrentActionIndex() const {
         size_t count;
-        const DogActionFunc* table = ActionTable(&count);
+        const EnDogActionFunc* table = ActionTable(&count);
         for (size_t i = 0; i < count; i++)
             if (table[i] == Typed()->actionFunc)
                 return (u8)(i);
@@ -99,7 +98,7 @@ class DogController : public AbstractActorController {
                 u8 id = (u8)(data.Read<PackedUInt1>().value());
                 m_currentActionIndex = id;
                 size_t count;
-                const DogActionFunc* table = ActionTable(&count);
+                const EnDogActionFunc* table = ActionTable(&count);
                 if (id < count)
                     dog->actionFunc = table[id];
                 break;
@@ -143,7 +142,7 @@ class DogController : public AbstractActorController {
         UpdateAnimation(&dog->skelAnime, false);
 
         if (dog->actor.xzDistToPlayer < 150.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         {
             Vec3f rayOrigin = dog->actor.world.pos;

@@ -244,12 +244,12 @@ class ArmosController : public AbstractActorController {
         UpdateAnimation(&am->skelAnime, LOCK_CUR_FRAME);
 
         if (fabsf(am->dyna.unk_150) > 0.001f) {
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
             am->dyna.unk_150 = 0.0f;
         }
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -259,7 +259,7 @@ class ArmosController : public AbstractActorController {
 
         if (!IsStatue() && am->actionFunc == EnAm_Sleep && am->dyna.actor.xzDistToPlayer < 240.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         Actor_MoveXZGravity(&am->dyna.actor);
         Actor_UpdateBgCheckInfo(play, &am->dyna.actor, 20.0f, 28.0f, 80.0f, 0x1D);

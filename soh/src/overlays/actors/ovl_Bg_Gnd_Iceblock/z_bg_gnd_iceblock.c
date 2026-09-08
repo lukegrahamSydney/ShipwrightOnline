@@ -358,3 +358,5 @@ void BgGndIceblock_Draw(Actor* thisx, PlayState* play) {
 
     Gfx_DrawDListOpa(play, gWaterTrialIceBlockDL);
 }
+
+u8* gGndIceblockPositions = sBlockPositions;

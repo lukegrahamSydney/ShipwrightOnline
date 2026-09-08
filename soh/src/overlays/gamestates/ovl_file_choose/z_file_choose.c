@@ -2870,6 +2870,7 @@ void FileChoose_Main(GameState* thisx) {
     gFileSelectUpdateFuncs[this->menuMode](&this->state);
     FrameInterpolation_StartRecord();
     gFileSelectDrawFuncs[this->menuMode](&this->state);
+    GameInteractor_ExecuteOnDrawOverlay(this->state.gfxCtx);
     FrameInterpolation_StopRecord();
 
     // do not draw controls text in the options menu
@@ -2894,7 +2895,10 @@ void FileChoose_Main(GameState* thisx) {
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0, 0, 0, sScreenFillAlpha);
     gDPFillRectangle(POLY_OPA_DISP++, 0, 0, gScreenWidth - 1, gScreenHeight - 1);
 
+
     CLOSE_DISPS(this->state.gfxCtx);
+
+
 }
 
 void FileChoose_InitContext(GameState* thisx) {

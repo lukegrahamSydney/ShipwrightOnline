@@ -333,7 +333,7 @@ class LizalfosController : public AbstractActorController {
     }
 
     void OnActorInit() override {
-        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
+        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
 
     }
 
@@ -342,7 +342,7 @@ class LizalfosController : public AbstractActorController {
         {
             auto partner = Partner(gPlayState);
             if (partner && !partner->IsLeader())
-                partner->ClaimLeadership(CLAIM_REASON_HIT);
+                partner->ClaimLeadership(CLAIM_REASON_NOW);
         }
         AbstractActorController::UpdateLeader(play);
 
@@ -353,7 +353,7 @@ class LizalfosController : public AbstractActorController {
         UpdateAnimation(&zf->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

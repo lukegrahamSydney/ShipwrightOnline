@@ -242,15 +242,15 @@ class TektiteController : public AbstractActorController {
         UpdateAnimation(&tite->skelAnime, LOCK_CUR_FRAME);
 
         if (tite->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
         tite->collider.base.acFlags &= ~AC_HIT;
 
         bool hunting = m_currentActionIndex <= 3 || m_currentActionIndex == ID_UNKNOWN;
         if (hunting && tite->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         tite->actor.focus.pos = tite->actor.world.pos;
         tite->actor.focus.pos.y += 20.0f;

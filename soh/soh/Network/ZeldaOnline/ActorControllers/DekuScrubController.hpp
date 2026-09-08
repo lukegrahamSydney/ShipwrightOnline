@@ -223,15 +223,15 @@ class DekuScrubController : public AbstractActorController {
         UpdateAnimation(&scrub->skelAnime, LOCK_CUR_FRAME);
 
         if (scrub->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         u8 id = CurrentActionIndex();
         bool claimable = (id <= 3) || (id == 0xFF);
-        if (claimable && scrub->actor.xzDistToPlayer < 200.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+        if (claimable && scrub->actor.xzDistToPlayer < 400.0f && IsLocalPlayerClosest())
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (scrub->actionFunc == EnDekunuts_Wait) {
             Actor_SetFocus(&scrub->actor, scrub->skelAnime.curFrame);

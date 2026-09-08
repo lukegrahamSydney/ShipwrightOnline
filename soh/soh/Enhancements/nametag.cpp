@@ -207,6 +207,16 @@ void UpdateNameTags() {
     sMirrorWorldActive = CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0);
 }
 
+extern "C" void NameTag_ChangeActorTextColour(Actor* actor, const Color_RGBA8* textColour) {
+    for (auto& nameTag : nameTags) {
+        if (nameTag.actor == actor)
+        {
+            nameTag.textColor = *textColour;
+            break;
+        }
+    }
+}
+
 extern "C" void NameTag_RegisterForActorWithOptions(Actor* actor, const char* text, NameTagOptions options) {
     std::string processedText = std::string(Interface_ReplaceSpecialCharacters((char*)text));
 

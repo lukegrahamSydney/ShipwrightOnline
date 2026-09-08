@@ -61,6 +61,11 @@ class DekuBabaController : public AbstractActorController {
         return sTable;
     }
 
+    void OnActorInit() override {
+        Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
+    }
+
+
     u8 CurrentActionIndex() const {
         size_t n;
         const void* const* t = ActionTable(&n);
@@ -199,7 +204,7 @@ class DekuBabaController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (CurrentActionIndex() == ID_SHRINK_DIE && !IsRunningLocally()) {
+        if (CurrentActionIndex() == ID_SHRINK_DIE) {
             GoLocal();
         }
     }
@@ -215,13 +220,13 @@ class DekuBabaController : public AbstractActorController {
         }
 
         if (db->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         if (db->actionFunc == EnDekubaba_Wait && db->actor.xzDistToPlayer < 150.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         RegisterColliderBase(play, &db->collider.base, m_roles);
     }

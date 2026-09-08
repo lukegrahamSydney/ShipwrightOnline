@@ -1,6 +1,5 @@
 #include "ZeldaOnlineClient.hpp"
 
-#include "ZeldaOnlineClient.hpp"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -27,6 +26,24 @@ extern "C" {
 #include "src/overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "src/overlays/actors/ovl_Bg_Bdan_Switch/z_bg_bdan_switch.h"
 #include "src/overlays/actors/ovl_Bg_Spot02_Objects/z_bg_spot02_objects.h"
+#include "src/overlays/actors/ovl_En_Po_Sisters/z_en_po_sisters.h"
+#include "src/overlays/actors/ovl_Obj_Timeblock/z_obj_timeblock.h"
+#include "src/overlays/actors/ovl_Bg_Mori_Idomizu/z_bg_mori_idomizu.h"
+#include "src/overlays/actors/ovl_Obj_Warp2block/z_obj_warp2block.h"
+#include "src/overlays/actors/ovl_Bg_Ice_Shelter/z_bg_ice_shelter.h"
+#include "src/overlays/actors/ovl_Bg_Jya_Megami/z_bg_jya_megami.h"
+#include "src/overlays/actors/ovl_Obj_Lightswitch/z_obj_lightswitch.h"
+#include "src/overlays/actors/ovl_Bg_Jya_Bombchuiwa/z_bg_jya_bombchuiwa.h"
+#include "src/overlays/actors/ovl_Demo_Kekkai/z_demo_kekkai.h"
+#include "src/overlays/actors/ovl_Object_Kankyo/z_object_kankyo.h"
+#include "src/overlays/actors/ovl_Demo_Gj/z_demo_gj.h"
+#include "objects/object_gj/object_gj.h"
+
+
+static const s32 sKankyoTrialFlags[6] = {
+    EVENTCHKINF_COMPLETED_FOREST_TRIAL, EVENTCHKINF_COMPLETED_WATER_TRIAL, EVENTCHKINF_COMPLETED_SHADOW_TRIAL,
+    EVENTCHKINF_COMPLETED_FIRE_TRIAL,   EVENTCHKINF_COMPLETED_LIGHT_TRIAL, EVENTCHKINF_COMPLETED_SPIRIT_TRIAL,
+};
 
 extern PlayState* gPlayState;
 
@@ -42,7 +59,7 @@ void ObjSwitch_EyeOpeningInit(ObjSwitch*);
 void EnKusa_CutWaitRegrow(EnKusa*, PlayState* play);
 void BgDdanKd_LowerStairs(BgDdanKd*, PlayState* play);
 
-#include "src/overlays/actors/ovl_Bg_Dodoago/z_bg_dodoago.h"
+
 void BgDodoago_WaitExplosives(BgDodoago* self, PlayState* play);
 void BgDodoago_LightOneEye(BgDodoago* self, PlayState* play);
 void BgDodoago_OpenJaw(BgDodoago* self, PlayState* play);
@@ -65,6 +82,24 @@ void func_8086D730(BgBdanSwitch* sw);
 void DoorShutter_Idle(DoorShutter* thisx, PlayState* play);
 void func_808ACA08(BgSpot02Objects* thisx, PlayState* play);
 void func_808AC908(BgSpot02Objects* thisx, PlayState* play);
+void func_80ADAFC0(EnPoSisters* thisx, PlayState* play);
+void func_80AD99D4(EnPoSisters* thisx, PlayState* play);
+void func_80AD95D8(EnPoSisters* thisx);
+void ObjTimeblock_SpawnDemoEffect(ObjTimeblock* thisx, PlayState* play);
+void ObjTimeblock_Normal(ObjTimeblock* thisx, PlayState* play);
+void ObjWarp2block_Spawn(ObjWarp2block* thisx, PlayState* play);
+void func_80BA2610(ObjWarp2block* thisx, PlayState* play);
+void BgIceShelter_Idle(BgIceShelter* thisx, PlayState* play);
+void BgIceShelter_SetupMelt(BgIceShelter* thisx);
+void BgIceShelter_Melt(BgIceShelter* thisx, PlayState* play);
+void BgJyaMegami_DetectLight(BgJyaMegami* thisx, PlayState* play);
+void BgJyaMegami_SetupExplode(BgJyaMegami* thixs);
+void ObjLightswitch_Off(ObjLightswitch* thisx, PlayState* play);
+void ObjLightswitch_SetupDisappearDelay(ObjLightswitch* thisx);
+void ObjLightswitch_SetupTurnOn(ObjLightswitch* thisx);
+void BgJyaBombchuiwa_WaitForExplosion(BgJyaBombchuiwa* thisx, PlayState* play);
+s32 DemoKekkai_CheckEventFlag(s32 params);
+void DemoGj_InitCommon(DemoGj* thisx, PlayState* play, CollisionHeader* header);
 }
 
 namespace ZeldaOnline {
@@ -170,9 +205,9 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
         arrow->actor.flags |= ACTOR_FLAG_ZO_USER2;
 
         ByteStream p;
-        p << PackedFloat4(arrow->actor.world.pos.x);
-        p << PackedFloat4(arrow->actor.world.pos.y);
-        p << PackedFloat4(arrow->actor.world.pos.z);
+        p << PackedFloat4(arrow->actor.prevPos.x);
+        p << PackedFloat4(arrow->actor.prevPos.y);
+        p << PackedFloat4(arrow->actor.prevPos.z);
         p << PackedInt2(arrow->actor.world.rot.x);
         p << PackedInt2(arrow->actor.world.rot.y);
         p << PackedInt2(arrow->actor.params);
@@ -332,8 +367,228 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
                 *color = controller->GetTunicColour();
         }
     });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_DOOR_SHUTTER, isConnected, [&](void* refActor, bool* should) {
+        DoorShutter* actor = static_cast<DoorShutter*>(refActor);
+
+        if (Flags_GetSwitch(gPlayState, actor->dyna.actor.params & 0x3F)) {
+            DECR(actor->unlockTimer);
+        }
+    });
+
+    
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_OBJ_TIMEBLOCK, enabled, [&](void* refActor, bool* should) {
+        ObjTimeblock* block = static_cast<ObjTimeblock*>(refActor);
+
+
+        if (block->unk_177 == 0 || block->actionFunc != ObjTimeblock_Normal)
+            return;
+
+        if (block->demoEffectTimer > 0 || block->demoEffectFirstPartTimer > 0)
+            return;
+
+        s32 flag = block->dyna.actor.params & 0x3F;
+        u8 flagNow = Flags_GetSwitch(gPlayState, flag) ? true : false;
+        if (flagNow == block->unk_174)
+            return;
+
+
+        ObjTimeblock_SpawnDemoEffect(block, gPlayState);
+        block->demoEffectTimer = 160;
+        OnePointCutscene_Attention(gPlayState, &block->dyna.actor);
+        block->demoEffectFirstPartTimer = 12;
+    });
+
+    //In forest temple, only do the camera effect when changing the water level when in room 7
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_MORI_IDOMIZU, enabled, [&](void* refActor, bool* should) {
+        BgMoriIdomizu* water = static_cast<BgMoriIdomizu*>(refActor);
+
+        if (gPlayState->roomCtx.curRoom.num == 7) {
+            return;
+        }
+
+        s32 switchFlagSet = Flags_GetSwitch(gPlayState, water->actor.params & 0x3F);
+        if (switchFlagSet == water->prevSwitchFlagSet) {
+            return;
+        }
+
+        water->targetWaterLevel = switchFlagSet ? -282.0f : 184.0f;
+        water->drainTimer = 90;
+        water->prevSwitchFlagSet = switchFlagSet;
+    });
+
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_OBJ_WARP2BLOCK, enabled, [&](void* refActor, bool* should) {
+        ObjWarp2block* block = static_cast<ObjWarp2block*>(refActor);
+
+        if (block->actionFunc != func_80BA2610)
+            return;
+        if (block->unk_16C > 0 || block->unk_170 > 0)
+            return;
+
+        bool flagNow = Flags_GetSwitch(gPlayState, block->dyna.actor.params & 0x3F) != 0;
+        bool flagWas = (block->dyna.actor.flags & ACTOR_FLAG_ZO_USER1) != 0;
+
+        if (flagNow == flagWas)
+            return;
+
+        // Our own SwapWithChild will toggle the flag back in 12 frames, so
+        // record what it will be THEN, not what it is now.
+        if (!flagNow)
+            block->dyna.actor.flags |= ACTOR_FLAG_ZO_USER1;
+        else
+            block->dyna.actor.flags &= ~ACTOR_FLAG_ZO_USER1;
+
+        ObjWarp2block_Spawn(block, gPlayState);
+        block->unk_16C = 0xA0;
+        OnePointCutscene_Attention(gPlayState, &block->dyna.actor);
+        block->unk_170 = 0xC;
+    });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_DODOAGO, enabled, [&](void* refActor, bool* should) {
+        BgDodoago* mouth = static_cast<BgDodoago*>(refActor);
+
+        if (mouth->actionFunc != BgDodoago_WaitExplosives)
+            return;
+
+        if (!Flags_GetSwitch(gPlayState, mouth->dyna.actor.params & 0x3F))
+            return;
+
+        mouth->state = 0;
+        mouth->actionFunc = BgDodoago_OpenJaw;
+    });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_ICE_SHELTER, isConnected, [&](void* refActor, bool* should) {
+        BgIceShelter* actor = static_cast<BgIceShelter*>(refActor);
+        s16 flag = actor->dyna.actor.params & 0x3F;
+
+        if ((actor->dyna.actor.params >> 6) & 1) {
+            return;
+        }
+
+        if (actor->actionFunc == BgIceShelter_Idle) {
+            if (Flags_GetSwitch(gPlayState, flag)) {
+                if (((actor->dyna.actor.params >> 8) & 7) == RED_ICE_KING_ZORA && actor->dyna.actor.parent != NULL) {
+                    actor->dyna.actor.parent->freezeTimer = 50;
+                }
+                BgIceShelter_SetupMelt(actor);
+                Audio_PlayActorSound2(&actor->dyna.actor, NA_SE_EV_ICE_MELT);
+            }
+        } else if (actor->actionFunc == BgIceShelter_Melt && !Flags_GetSwitch(gPlayState, flag)) {
+            Flags_SetSwitch(gPlayState, flag);
+        }
+    });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_JYA_MEGAMI, enabled, [](void* actorRef, bool*) {
+        BgJyaMegami* face = (BgJyaMegami*)actorRef;
+        if (face->actionFunc == BgJyaMegami_DetectLight &&
+            Flags_GetSwitch(gPlayState, face->dyna.actor.params & 0x3F)) {
+            BgJyaMegami_SetupExplode(face);
+        }
+    });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_JYA_BOMBCHUIWA, enabled, [](void* actorRef, bool*) {
+        BgJyaBombchuiwa* rock = (BgJyaBombchuiwa*)actorRef;
+        if (rock->actionFunc == BgJyaBombchuiwa_WaitForExplosion && rock->timer == 0 &&
+            Flags_GetSwitch(gPlayState, rock->actor.params & 0x3F)) {
+            rock->timer = 1;
+        }
+    });
+    
+    //block at volvagia. never destroys...otherwise others might be stuck
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_BG_VB_SIMA, enabled, [](void* actorRef, bool* should) { *should = false;
+    });
+
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_DEMO_KEKKAI, enabled, [&](void* refActor, bool*should) {
+        DemoKekkai* kekkai = static_cast<DemoKekkai*>(refActor);
+
+        if (gPlayState == nullptr)
+            return;
+
+        if (!DemoKekkai_CheckEventFlag(kekkai->actor.params))
+            return;
+
+        if (kekkai->actor.params == KEKKAI_TOWER)
+            gPlayState->envCtx.unk_BF = 1;
+
+        Actor_Kill(&kekkai->actor);
+        *should = false;
+    });
+
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_OBJECT_KANKYO, enabled, [&](void* refActor, bool*) {
+        ObjectKankyo* kankyo = static_cast<ObjectKankyo*>(refActor);
+
+        if (kankyo->actor.params != 5)
+            return;
+
+        for (s32 i = 0; i < 6; i++) {
+            if (Flags_GetEventChkInf(sKankyoTrialFlags[i])) {
+                Math_ApproachZeroF(&kankyo->effects[i].size, 0.1f, 0.1f);
+            }
+        }
+    });
+
+
+    //Cleans up the rubble from the ganon fight correctly for late joiners
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_DEMO_GJ, enabled, [&](void* refActor, bool* should) {
+        DemoGj* rubble = static_cast<DemoGj*>(refActor);
+
+        if (rubble->updateMode < 1 || rubble->updateMode > 17)
+            return;
+
+        BossGanon2* ganon = rubble->ganon;
+
+        if (ganon == nullptr && gPlayState != nullptr) {
+            Actor* it = gPlayState->actorCtx.actorLists[ACTORCAT_BOSS].head;
+
+            while (it != nullptr) {
+                if (it->id == ACTOR_BOSS_GANON2) {
+                    ganon = (BossGanon2*)(it);
+                    break;
+                }
+                it = it->next;
+            }
+        }
+
+        if (ganon == nullptr || ganon->unk_314 < 2)
+            return;
+
+        if (rubble->updateMode <= 14) {
+            Actor_Kill(&rubble->dyna.actor);
+            *should = false; 
+            return;
+        }
+
+        CollisionHeader* header = nullptr;
+
+        switch (rubble->updateMode) {
+            case 15:
+                header = (CollisionHeader*) & gGanonsCastleRubble2Col;
+                rubble->updateMode = 18;
+                rubble->drawConfig = 16;
+                break;
+            case 16:
+                header = (CollisionHeader*)&gGanonsCastleRubble3Col;
+                rubble->updateMode = 19;
+                rubble->drawConfig = 17;
+                break;
+            case 17:
+                header = (CollisionHeader*)&gGanonsCastleRubbleTallCol;
+                rubble->updateMode = 20;
+                rubble->drawConfig = 18;
+                break;
+        }
+
+        DemoGj_InitCommon(rubble, gPlayState, header);
+        rubble->dyna.actor.scale.x *= 0.8f;
+        rubble->dyna.actor.scale.y *= 0.8f;
+        rubble->dyna.actor.scale.z *= 0.8f;
+    });
+
+
 }
 
-void ZeldaOnlineClient::GetTunicColours(Player* player, Color_RGB8* out) {
-}
+
 } // namespace ZeldaOnline

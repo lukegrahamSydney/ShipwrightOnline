@@ -221,7 +221,7 @@ class BigokutaController : public AbstractActorController {
         UpdateAnimation(&bo->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -231,7 +231,7 @@ class BigokutaController : public AbstractActorController {
 
         if (bo->actionFunc != func_809BE26C && bo->actor.colChkInfo.health > 0 && bo->actor.xzDistToPlayer < 400.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         Actor_SetFocus(&bo->actor, bo->actor.scale.y * 25.0f * 100.0f);
 

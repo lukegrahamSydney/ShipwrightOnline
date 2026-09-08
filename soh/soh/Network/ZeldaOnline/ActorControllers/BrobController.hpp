@@ -200,7 +200,7 @@ class BrobController : public AbstractActorController {
         UpdateAnimation(&brob->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -212,7 +212,7 @@ class BrobController : public AbstractActorController {
         if (brob->actionFunc == EnBrob_Idle &&
             (DynaPolyActor_IsPlayerOnTop(&brob->dyna) || brob->dyna.actor.xzDistToPlayer < 300.0f) &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         bool solid = ShouldBeSolid();
         if (!m_solidityKnown || solid != m_isSolid) {

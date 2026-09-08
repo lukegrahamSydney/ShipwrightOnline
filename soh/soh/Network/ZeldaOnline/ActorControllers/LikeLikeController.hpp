@@ -230,13 +230,13 @@ class LikeLikeController : public AbstractActorController {
             rr->collider2.base.acFlags &= ~AC_HIT;
         } else {
             if ((rr->collider1.base.acFlags & AC_HIT) || (rr->collider2.base.acFlags & AC_HIT)) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 return;
             }
 
             if (rr->actionFunc != EnRr_Death && rr->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-                ClaimLeadership(CLAIM_REASON_PROXIMITY);
+                ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
             rr->collider1.base.acFlags &= ~AC_HIT;
             rr->collider2.base.acFlags &= ~AC_HIT;

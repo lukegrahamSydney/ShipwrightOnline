@@ -14,6 +14,14 @@ typedef struct {
     /* 0x04 */ void* texture;
 } DoorKillerTextureEntry; // size 0x8
 
+typedef enum {
+    /* 0 */ DOOR_KILLER_DOOR,
+    /* 1 */ DOOR_KILLER_RUBBLE_PIECE_1,
+    /* 2 */ DOOR_KILLER_RUBBLE_PIECE_2,
+    /* 3 */ DOOR_KILLER_RUBBLE_PIECE_3,
+    /* 4 */ DOOR_KILLER_RUBBLE_PIECE_4
+} DoorKillerBehaviour;
+
 struct DoorKiller;
 
 typedef void (*DoorKillerActionFunc)(struct DoorKiller*, PlayState*);

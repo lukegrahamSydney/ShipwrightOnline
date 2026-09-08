@@ -246,7 +246,7 @@ class RedeadController : public AbstractActorController {
     }
 
     void OnPropertiesApplied(u64 changed) override {
-        if (m_currentActionIndex == ID_DEAD && !IsRunningLocally()) {
+        if (m_currentActionIndex == ID_DEAD) {
             EnRd_SetupDead(Typed());
             GoLocal();
         }
@@ -258,14 +258,14 @@ class RedeadController : public AbstractActorController {
         UpdateAnimation(&rd->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
         rd->collider.base.acFlags &= ~AC_HIT;
 
         if (rd->action != ACTION_DEAD && rd->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         rd->actor.focus.pos = rd->actor.world.pos;
         rd->actor.focus.pos.y += 50.0f;

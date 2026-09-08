@@ -91,6 +91,7 @@ class BushController : public AbstractActorController {
         PROP_TIMER,
     };
 
+
     void BuildCustomProperties(ByteStream& out) override {
         EnKusa* kusa = Typed();
 
@@ -147,13 +148,13 @@ class BushController : public AbstractActorController {
         EnsureDrawInstalled(play);
 
         if (HitWouldReact(play)) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
-        if (kusa->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+        if (kusa->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }

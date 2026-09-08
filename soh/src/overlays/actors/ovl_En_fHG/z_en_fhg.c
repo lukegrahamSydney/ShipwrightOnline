@@ -713,6 +713,10 @@ void EnfHG_PostDraw(Actor* thisx, PlayState* play, Skin* skin) {
 void EnfHG_Draw(Actor* thisx, PlayState* play) {
     EnfHG* this = (EnfHG*)thisx;
     BossGanondrof* bossGnd = (BossGanondrof*)this->actor.parent;
+
+    if (bossGnd == NULL)
+        return;
+
     s32 pad;
 
     OPEN_DISPS(play->state.gfxCtx);

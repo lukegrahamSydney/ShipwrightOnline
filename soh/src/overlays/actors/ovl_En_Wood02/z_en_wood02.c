@@ -283,6 +283,17 @@ void EnWood02_Init(Actor* thisx, PlayState* play2) {
             extraRot = 0x4000;
         }
 
+        // Snap to floor, or remove if over void
+        this->actor.world.pos.y += 200.0f;
+        floorY = BgCheck_EntityRaycastFloor4(&play->colCtx, &outPoly, &bgId, &this->actor, &this->actor.world.pos);
+
+        if (floorY > BGCHECK_Y_MIN) {
+            this->actor.world.pos.y = floorY;
+        } else {
+            Actor_Kill(&this->actor);
+            return;
+        }
+
         if (spawnType == WOOD_SPAWN_SPAWNER) {
             this->drawType |= this->unk_14C << 4;
             EnWood02_SpawnOffspring(this, play);
@@ -294,16 +305,7 @@ void EnWood02_Init(Actor* thisx, PlayState* play2) {
             this->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
         }
 
-        // Snap to floor, or remove if over void
-        this->actor.world.pos.y += 200.0f;
-        floorY = BgCheck_EntityRaycastFloor4(&play->colCtx, &outPoly, &bgId, &this->actor, &this->actor.world.pos);
-
-        if (floorY > BGCHECK_Y_MIN) {
-            this->actor.world.pos.y = floorY;
-        } else {
-            Actor_Kill(&this->actor);
-            return;
-        }
+        
     }
     ActorShape_Init(&this->actor.shape, 0.0f, NULL, 0.0f);
     this->actor.home.rot.y = 0;
@@ -313,11 +315,11 @@ void EnWood02_Init(Actor* thisx, PlayState* play2) {
 void EnWood02_Destroy(Actor* thisx, PlayState* play) {
     EnWood02* this = (EnWood02*)thisx;
 
+
     if (this->actor.params <= WOOD_TREE_KAKARIKO_ADULT) {
         Collider_DestroyCylinder(play, &this->collider);
     }
 }
-
 void EnWood02_Update(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     EnWood02* this = (EnWood02*)thisx;

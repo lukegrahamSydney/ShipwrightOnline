@@ -142,9 +142,9 @@ const ActorInit Boss_Mo_InitVars = {
     (ActorResetFunc)BossMo_Reset,
 };
 
-static BossMo* sMorphaCore = NULL;
-static BossMo* sMorphaTent1 = NULL;
-static BossMo* sMorphaTent2 = NULL;
+BossMo* sMorphaCore = NULL;
+BossMo* sMorphaTent1 = NULL;
+BossMo* sMorphaTent2 = NULL;
 
 static f32 sFlatWidth[41] = {
     15.0f, 12.0f, 9.0f, 6.5f, 4.8f, 4.0f, 3.4f, 3.1f, 3.0f, 3.1f, 3.2f, 3.4f, 3.6f, 3.8f,
@@ -332,6 +332,8 @@ static f32 sTentWidth[41] = {
     1.0f,  1.0f,  1.0f,  1.0f,  0.98f, 0.95f, 0.9f, 0.8f,  0.6f,  1.0f,  1.0f,  1.0f,  1.0f,
 };
 
+f32* gMorphaTentWidth = &sTentWidth;
+
 static f32 sDropletWidth[41] = {
     0.0f,      2.95804f,  4.123106f, 4.974937f, 5.656854f, 6.22495f,  6.708204f, 7.123903f, 7.483315f,
     7.794229f, 8.062258f, 8.291562f, 8.485281f, 8.645808f, 8.774964f, 8.87412f,  8.944272f, 8.9861f,
@@ -411,6 +413,8 @@ void BossMo_Init(Actor* thisx, PlayState* play2) {
         Collider_InitJntSph(play, &this->tentCollider);
         Collider_SetJntSph(play, &this->tentCollider, &this->actor, &sJntSphInit, this->tentElements);
         this->tentMaxAngle = 1.0f;
+
+
     }
 }
 

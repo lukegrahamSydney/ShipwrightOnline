@@ -219,6 +219,8 @@ class StalfosController : public AbstractActorController {
         PROP_COLL_ROLES,
         PROP_ANIM_CUR_FRAME,
         PROP_ANIM,
+        PROP_BROKEN,
+        PROP_BREAK_COUNT
     };
 
     void BuildCustomProperties(ByteStream& out) override {
@@ -248,7 +250,8 @@ class StalfosController : public AbstractActorController {
         if (LOCK_CUR_FRAME)
             PackProperty(PROP_ANIM_CUR_FRAME, PackedFloat4(st->skelAnime.curFrame), out);
         PackProperty(PROP_ANIM, BuildAnimProperty(CurrentAnimIndex(), &st->skelAnime), out);
-
+        PackProperty(PROP_BROKEN, PackedUInt1(st->actor.child != nullptr ? 1u : 0u), out);
+        PackProperty(PROP_BREAK_COUNT, PackedInt2(st->actor.home.rot.x), out);
         BuildStandardExtendedProperty(PROP_VELOCITY, out);
         BuildStandardExtendedProperty(PROP_GRAVITY, out);
         BuildStandardExtendedProperty(PROP_SCALE, out);
@@ -306,6 +309,17 @@ class StalfosController : public AbstractActorController {
                 ApplyAnimProperty((void*)a, &st->skelAnime, LOCK_CUR_FRAME ? st->skelAnime.curFrame : 0.0f, data);
                 break;
             }
+
+            case PROP_BROKEN: {
+                u8 broken = (u8)(data.Read<PackedUInt1>().value());
+                st->actor.child = broken ? &st->actor : nullptr;
+
+                break;
+            }
+
+           case PROP_BREAK_COUNT:
+                st->actor.home.rot.x = (s16)(data.Read<PackedInt2>().value());
+                break;
             default:
                 return false;
         }
@@ -335,28 +349,49 @@ class StalfosController : public AbstractActorController {
 
     void OnPropertiesApplied(u64 changed) override {
         EnTest* st = Typed();
+
+        if (gPlayState == nullptr) {
+            return;
+        }
+
+        if (!(changed & (1u << PROP_ACTION))) {
+            return;
+        }
+
+        //Down but can respawn
+        if (st->actionFunc == func_80862E6C && st->actor.child == nullptr) {
+            BodyBreak_Alloc(&st->bodyBreak, 60, gPlayState);
+        }
+
+
         if (st->actionFunc == func_808633E8) {
             BodyBreak_Alloc(&st->bodyBreak, 60, gPlayState);
             GoLocal();
         }
     }
-
     void UpdatePuppet(PlayState* play) override {
         EnTest* st = Typed();
 
         UpdateAnimation(&st->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
+
+        //In the down but can respawn position. Simulate the broken body parts 
+        if (st->actionFunc == func_80862E6C && st->actor.child == nullptr) {
+            if (BodyBreak_SpawnParts(&st->actor, &st->bodyBreak, play, st->actor.params + 8)) {
+            }
+        }
+
         st->bodyCollider.base.acFlags &= ~AC_HIT;
         st->shieldCollider.base.acFlags &= ~AC_BOUNCED;
         st->swordCollider.base.atFlags &= ~(AT_HIT | AT_BOUNCED);
 
         if (st->actor.colChkInfo.health > 0 && st->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (st->unk_7DE == 1) {
             Animation_Change(&st->upperSkelanime, (AnimationHeader*) & gStalfosBlockWithShieldAnim, 2.0f, 0.0f,

@@ -130,7 +130,11 @@ class HintScrubController : public AbstractActorController {
         PackProperty(PROP_HEALTH, PackedUInt1(scrub->actor.colChkInfo.health), out);
         PackProperty(PROP_ANIM_FLAG_TIMER, PackedInt2(scrub->animFlagAndTimer), out);
         PackProperty(PROP_TURN_YAW, PackedInt2(scrub->unk_196), out);
-        PackProperty(PROP_PUZZLE_COUNTER, PackedInt2(sPuzzleCounter), out);
+
+        if (m_puzzleCounter == sPuzzleCounter)
+            PackProperty(PROP_PUZZLE_COUNTER, PackedInt2(m_puzzleCounter), out);
+        else
+            PackNullProperty(PROP_PUZZLE_COUNTER, out);
 
         if (LOCK_CUR_FRAME)
             PackProperty(PROP_ANIM_CUR_FRAME, PackedFloat4(scrub->skelAnime.curFrame), out);
@@ -181,11 +185,22 @@ class HintScrubController : public AbstractActorController {
                 scrub->unk_196 = (s16)(data.Read<PackedInt2>().value());
                 return true;
             case PROP_PUZZLE_COUNTER:
-                sPuzzleCounter = (s16)(data.Read<PackedInt2>().value());
+                if (propLen != 0)
+                    m_puzzleCounter = sPuzzleCounter = (s16)(data.Read<PackedInt2>().value());
                 return true;
             default:
                 return false;
         }
+    }
+
+    void UpdateLeader(PlayState* play) override {
+        auto oldGlobalPuzzleCounter = sPuzzleCounter;
+        AbstractActorController::UpdateLeader(play);
+
+        //This deku changed it
+        if (oldGlobalPuzzleCounter != sPuzzleCounter)
+            m_puzzleCounter = sPuzzleCounter;       //Force us to send our value out
+        
     }
 
     void UpdatePuppet(PlayState* play) override {
@@ -203,21 +218,22 @@ class HintScrubController : public AbstractActorController {
         }
 
         if (scrub->collider.base.acFlags & AC_HIT) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
 
         u8 id = CurrentActionIndex();
         bool claimable = (id <= 3) || (id == 0xFF);
         if (claimable && scrub->actor.xzDistToPlayer < 250.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         RegisterCylinder(play, &scrub->collider, m_roles);
     }
 
   private:
     u8 m_roles = COLL_OC | COLL_AC;
+    s16 m_puzzleCounter =-1;
 };
 
 }

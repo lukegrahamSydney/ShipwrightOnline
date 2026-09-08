@@ -18,6 +18,9 @@ extern "C" SaveContext gSaveContext;
 extern "C" u16 gEquipMasks[4];
 extern "C" u8 gEquipShifts[4];
 
+extern "C" void SkeletonPatcher_UnregisterSkeleton(SkelAnime* skelAnime) {
+    SOH::SkeletonPatcher::UnregisterSkeleton(skelAnime);
+}
 namespace SOH {
 SkeletonData* Skeleton::GetPointer() {
     return &skeletonData;
@@ -97,7 +100,7 @@ void SkeletonPatcher::UnregisterSkeleton(SkelAnime* skelAnime) {
 
         if (skel.skelAnime == skelAnime) {
             skeletons.erase(skeletons.begin() + i);
-            break;
+           // break;
         }
     }
 }

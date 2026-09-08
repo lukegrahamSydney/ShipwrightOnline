@@ -173,7 +173,7 @@ class BaController : public AbstractActorController {
         EnBa* ba = Typed();
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -181,7 +181,7 @@ class BaController : public AbstractActorController {
         ba->collider.base.atFlags &= ~AT_HIT;
 
         if (m_currentActionIndex != ID_DIE && ba->actor.xzDistToPlayer < 250.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (ba->actionFunc != nullptr)
             ba->actionFunc(ba, play);

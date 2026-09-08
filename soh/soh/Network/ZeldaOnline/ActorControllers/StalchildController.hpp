@@ -213,7 +213,7 @@ class StalchildController : public AbstractActorController {
     void OnPropertiesApplied(u64 changed) override {
         EnSkb* skb = Typed();
 
-        if (skb->actionState == STATE_DYING && !IsRunningLocally()) {
+        if (skb->actionState == STATE_DYING) {
             func_80AFD7B4(skb, gPlayState);
             GoLocal();
         }
@@ -223,8 +223,8 @@ class StalchildController : public AbstractActorController {
         EnSkb* skb = Typed();
 
         if (AnyAcHit()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
-            m_originalUpdate(m_actor, play);
+            ClaimLeadership(CLAIM_REASON_NOW);
+            UpdateLeader(play);
             return;
         }
         ClearHitFlags();
@@ -232,7 +232,7 @@ class StalchildController : public AbstractActorController {
         u8 st = skb->actionState;
         bool active = (st == 0 || st == 4);
         if (active && skb->actor.xzDistToPlayer < 500.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         UpdateAnimation(&skb->skelAnime, LOCK_CUR_FRAME);
 

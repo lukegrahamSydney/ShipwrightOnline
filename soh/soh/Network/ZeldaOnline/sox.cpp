@@ -255,6 +255,34 @@ void soxDisableNagle(SoxHandle socketId)
     setsockopt(socketId, IPPROTO_TCP, TCP_NODELAY, (char*)&opt, sizeof(opt));
 }
 
+void soxEnableKeepAlive(SoxHandle socketId) {
+    int on = 1;
+    setsockopt(socketId, SOL_SOCKET, SO_KEEPALIVE, (const char*)&on, sizeof(on));
+
+#if defined(_WIN32) || defined(WIN32)
+    struct tcp_keepalive settings;
+    DWORD returned = 0;
+    settings.onoff = 1;
+    settings.keepalivetime = 30000;
+    settings.keepaliveinterval = 5000;
+    WSAIoctl(socketId, SIO_KEEPALIVE_VALS, &settings, sizeof(settings), NULL, 0, &returned, NULL, NULL);
+#else
+#ifdef TCP_KEEPIDLE
+    int idle = 30;
+    setsockopt(socketId, IPPROTO_TCP, TCP_KEEPIDLE, (const char*)&idle, sizeof(idle));
+#endif
+#ifdef TCP_KEEPINTVL
+    int interval = 5;
+    setsockopt(socketId, IPPROTO_TCP, TCP_KEEPINTVL, (const char*)&interval, sizeof(interval));
+#endif
+#ifdef TCP_KEEPCNT
+    int count = 4;
+    setsockopt(socketId, IPPROTO_TCP, TCP_KEEPCNT, (const char*)&count, sizeof(count));
+#endif
+#endif
+}
+
+
 bool soxBindUdpPort(SoxHandle socketId, int port, int family)
 {
     if (family == AF_INET6)

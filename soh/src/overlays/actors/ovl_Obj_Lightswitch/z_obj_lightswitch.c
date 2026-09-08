@@ -194,7 +194,7 @@ void ObjLightswitch_Init(Actor* thisx, PlayState* play) {
             // "Push-pull block occurrence failure"
             osSyncPrintf("押引ブロック発生失敗(%s %d)(arg_data 0x%04x)\n", __FILE__, __LINE__, this->actor.params);
             osSyncPrintf(VT_RST);
-            removeSelf = true;
+           // removeSelf = true;
         }
     }
     ObjLightswitch_InitCollider(this, play);
@@ -382,7 +382,7 @@ void ObjLightswitch_Update(Actor* thisx, PlayState* play2) {
     this->actionFunc(this, play);
 
     if (this->actor.update != NULL) {
-        if ((this->actor.params & 1) == 1) {
+        if (this->actor.child && (this->actor.params & 1) == 1) {
             this->actor.world.pos.x = this->actor.child->world.pos.x;
             this->actor.world.pos.y = this->actor.child->world.pos.y + 60.0f;
             this->actor.world.pos.z = this->actor.child->world.pos.z;
@@ -410,12 +410,14 @@ void ObjLightswitch_DrawOpa(ObjLightswitch* this, PlayState* play) {
 
     if ((this->actor.params & 1) == 1) {
         child = this->actor.child;
-        this->actor.world.pos.x = child->world.pos.x;
-        this->actor.world.pos.y = child->world.pos.y + 60.0f;
-        this->actor.world.pos.z = child->world.pos.z;
-        Math_Vec3f_Copy(&pos, &this->actor.world.pos);
-        Matrix_SetTranslateRotateYXZ(pos.x, pos.y, pos.z, &this->actor.shape.rot);
-        Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
+        if (child) {
+            this->actor.world.pos.x = child->world.pos.x;
+            this->actor.world.pos.y = child->world.pos.y + 60.0f;
+            this->actor.world.pos.z = child->world.pos.z;
+            Math_Vec3f_Copy(&pos, &this->actor.world.pos);
+            Matrix_SetTranslateRotateYXZ(pos.x, pos.y, pos.z, &this->actor.shape.rot);
+            Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
+        }
     } else {
         pos.x = this->actor.world.pos.x;
         pos.y = this->actor.world.pos.y + this->actor.shape.yOffset * this->actor.scale.y;

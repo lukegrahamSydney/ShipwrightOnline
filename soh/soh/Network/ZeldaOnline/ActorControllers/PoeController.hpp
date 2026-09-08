@@ -106,6 +106,9 @@ class PoeController : public AbstractActorController {
 
     u8 CurrentAnimIndex() const {
         EnPoh* poh = Typed();
+        if (poh->info == nullptr)
+            return ANIM_UNKNOWN;
+
         void* cur = poh->skelAnime.animation;
         if (cur == nullptr)
             return ANIM_UNKNOWN;
@@ -231,16 +234,16 @@ class PoeController : public AbstractActorController {
     void OnPropertiesApplied(u64 changed) override {
         if (Typed()->actionFunc == EnPoh_Death) {
             EnPoh_SetupDeath(Typed(), gPlayState);
+
+            ReinstallUpdate();
+
             GoLocal();
         }
     }
 
     void UpdateLeader(PlayState* play) override {
         AbstractActorController::UpdateLeader(play);
-        if (m_actor->update != &AbstractActorController::DispatchUpdate) {
-            m_originalUpdate = m_actor->update;
-            m_actor->update = &AbstractActorController::DispatchUpdate;
-        }
+        ReinstallUpdate();
     }
 
     void EnsureLocalSkeletonReady(PlayState* play) {
@@ -286,7 +289,7 @@ class PoeController : public AbstractActorController {
             bool wouldReact = poh->actor.colChkInfo.damageEffect != 0 || poh->actor.colChkInfo.damage != 0;
             poh->colliderCyl.base.acFlags &= ~AC_HIT;
             if (wouldReact) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 return;
             }
@@ -295,7 +298,7 @@ class PoeController : public AbstractActorController {
 
         if (poh->actionFunc != EnPoh_Death && poh->actor.colChkInfo.health > 0 && poh->actor.xzDistToPlayer < 300.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         func_80AE089C(poh);
 

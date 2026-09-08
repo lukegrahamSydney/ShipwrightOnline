@@ -178,6 +178,9 @@ s32 EnDog_PlayAnimAndSFX(EnDog* this) {
 }
 
 s8 EnDog_CanFollow(EnDog* this, PlayState* play) {
+    if (this->dogFollowEverywhere)
+        return 1;
+
     if (this->collider.base.acFlags & AC_HIT) {
         this->collider.base.acFlags &= ~AC_HIT;
         return 2;
@@ -374,7 +377,7 @@ void EnDog_FollowPlayer(EnDog* this, PlayState* play) {
         return;
     }
 
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DogFollowsEverywhere"), 0)) {
+    if (CVarGetInteger(CVAR_ENHANCEMENT("DogFollowsEverywhere"), this->dogFollowEverywhere)) {
         // If the dog is too far away it's usually because they are stuck in a hole or on a different floor, this gives
         // them a push
         if (this->actor.xyzDistToPlayerSq > 250000.0f) {
@@ -397,7 +400,7 @@ void EnDog_FollowPlayer(EnDog* this, PlayState* play) {
     }
 
     if (this->actor.xzDistToPlayer > 400.0f) {
-        if (CVarGetInteger(CVAR_ENHANCEMENT("DogFollowsEverywhere"), 0)) {
+        if (CVarGetInteger(CVAR_ENHANCEMENT("DogFollowsEverywhere"), this->dogFollowEverywhere)) {
             // Instead of stopping following when the dog gets too far, just speed them up.
             speed = this->actor.xzDistToPlayer / 25.0f;
         } else {

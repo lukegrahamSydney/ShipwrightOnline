@@ -84,6 +84,15 @@ class RutoController : public AbstractActorController {
         return reinterpret_cast<EnRu1*>(m_actor);
     }
 
+    static void RegisterHooks(s16 actorID, bool enabled)
+    {
+        COND_ID_HOOK(ShouldActorInit, ACTOR_EN_RU1, enabled, [&](void* actorRef, bool*) {
+            Actor* actor = (Actor*)actorRef;
+
+            AbstractActorController::InstallCustomInit(actor, RutoController::EnRu1_Init);
+        });
+    }
+
     static void EnRu1_Init(Actor* thisx, PlayState* play) {
 
         EnRu1* ru = reinterpret_cast<EnRu1*>(thisx);
@@ -385,11 +394,6 @@ class RutoController : public AbstractActorController {
         return true;
     }
 
-    bool CanRelinquishLeadership() const override {
-
-        return gPlayState != NULL && gPlayState->pauseCtx.state != 0;
-    }
-
     static BdanObjectsController* FindPlatformController(PlayState* play) {
         static const u8 cats[] = { ACTORCAT_BG };
         for (u8 cat : cats) {
@@ -407,12 +411,22 @@ class RutoController : public AbstractActorController {
     void UpdateLeader(PlayState* play) override {
         auto platform = FindPlatformController(play);
         if (platform && !platform->IsLeader())
-            platform->ClaimLeadership(CLAIM_REASON_HIT);
+            platform->ClaimLeadership(CLAIM_REASON_NOW);
 
         auto ru = Typed();
-        ru->roomNum2 = gPlayState->roomCtx.curRoom.num;
+        ru->roomNum2 = play->roomCtx.curRoom.num;
 
         AbstractActorController::UpdateLeader(play);
+
+        //Kill Ruto after she falls down the hole. When cut scenes were skipped, this didnt happen
+        if (ru->action == 13)
+        {
+            if (ru->actor.world.pos.y < ru->actor.home.pos.y - 60)
+            {
+                Actor_Kill(&ru->actor);
+                return;
+            }
+        }
     }
 
     void UpdatePuppet(PlayState* play) override {
@@ -420,7 +434,7 @@ class RutoController : public AbstractActorController {
 
         ru->roomNum2 = play->roomCtx.curRoom.num;
         if (ru->actor.parent == &GET_PLAYER(play)->actor) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -428,11 +442,12 @@ class RutoController : public AbstractActorController {
         if (ru->action == 27)
             Actor_OfferCarry(&ru->actor, play);
 
-        else if (ru->action == 24)
+        m_conversationHandled = true;
+        if (ru->action == 24)
         {
             func_80AEF2D0(ru, play);
             if (ru->action != 24) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 return;
             }
         }
@@ -442,7 +457,9 @@ class RutoController : public AbstractActorController {
                 func_80AEF354(ru, play);
             ru->action = 25;
 
-        }
+        } else if (IsMyOpenTextboxActor())
+            m_conversationHandled = false;
+
         UpdateAnimation(&ru->skelAnime, LOCK_CUR_FRAME);
 
         EnRu1_UpdateEyes(ru);

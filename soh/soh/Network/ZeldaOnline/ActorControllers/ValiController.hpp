@@ -227,7 +227,7 @@ class ValiController : public AbstractActorController {
         EnsureDrawState();
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -238,7 +238,7 @@ class ValiController : public AbstractActorController {
 
         if (vali->actionFunc != EnVali_DivideAndDie && vali->actionFunc != EnVali_Frozen &&
             vali->actor.xzDistToPlayer < 300.0f && IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (vali->actionFunc != EnVali_DivideAndDie && vali->actionFunc != EnVali_Lurk) {
             Collider_UpdateCylinder(&vali->actor, &vali->bodyCollider);

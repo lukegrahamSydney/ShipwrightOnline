@@ -55,6 +55,9 @@ class BombFlowerController : public AbstractActorController {
         EnBombf* bf = Typed();
 
         if (IsGrownFlower()) {
+            if (Player_IsBurningStickInRange(gPlayState, &bf->actor.world.pos, 30.0f, 50.0f))
+                return true;
+
             return (bf->bombCollider.base.acFlags & AC_HIT) && bf->bombCollider.base.ac != nullptr &&
                    bf->bombCollider.base.ac->category != ACTORCAT_BOSS;
         }
@@ -139,7 +142,7 @@ class BombFlowerController : public AbstractActorController {
             bf->isFuseEnabled = 1;
             bf->timer = 0;
 
-            m_originalUpdate(m_actor, gPlayState);
+            UpdateLeader(gPlayState);
             GoLocal();
             return;
         }
@@ -148,14 +151,14 @@ class BombFlowerController : public AbstractActorController {
     void UpdatePuppet(PlayState* play) override {
         EnBombf* bf = Typed();
 
-        if (bf->actor.parent == &GET_PLAYER(play)->actor && !IsRunningLocally()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+        if (bf->actor.parent == &GET_PLAYER(play)->actor) {
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -165,8 +168,13 @@ class BombFlowerController : public AbstractActorController {
         if (bf->actor.parent != nullptr)
             bf->actor.room = -1;
 
-        if (IsGrownFlower() && bf->actor.parent == nullptr)
-            Actor_OfferCarry(&bf->actor, play);
+        if (bf->actor.parent == nullptr) {
+            if (IsGrownFlower()) {
+                Actor_OfferCarry(&bf->actor, play);
+            } else if (bf->actionFunc == EnBombf_Move && bf->timer >= 4) {
+                Actor_OfferCarry(&bf->actor, play);
+            }
+        }
 
         if (bf->actor.params == BOMBFLOWER_BODY && bf->isFuseEnabled != 0) {
             if (bf->timer < 127) {
@@ -205,6 +213,6 @@ class BombFlowerController : public AbstractActorController {
     }
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

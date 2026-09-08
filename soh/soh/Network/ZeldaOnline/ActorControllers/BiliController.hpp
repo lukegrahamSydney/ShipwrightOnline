@@ -198,7 +198,7 @@ class BiliController : public AbstractActorController {
         UpdateAnimation(&bi->skelAnime, LOCK_CUR_FRAME);
 
         if (HitWouldReact()) {
-            ClaimLeadership(CLAIM_REASON_HIT);
+            ClaimLeadership(CLAIM_REASON_NOW);
             UpdateLeader(play);
             return;
         }
@@ -207,7 +207,7 @@ class BiliController : public AbstractActorController {
 
         if (bi->actionFunc != EnBili_Die && bi->actor.colChkInfo.health > 0 && bi->actor.xzDistToPlayer < 300.0f &&
             IsLocalPlayerClosest())
-            ClaimLeadership(CLAIM_REASON_PROXIMITY);
+            ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         if (bi->actionFunc == EnBili_Die)
             return;

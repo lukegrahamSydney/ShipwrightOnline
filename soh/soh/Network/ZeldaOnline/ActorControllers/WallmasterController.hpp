@@ -249,13 +249,13 @@ class WallmasterController : public AbstractActorController {
 
         if (!IsHoldingSomeone()) {
             if (wm->collider.base.acFlags & AC_HIT) {
-                ClaimLeadership(CLAIM_REASON_HIT);
+                ClaimLeadership(CLAIM_REASON_NOW);
                 UpdateLeader(play);
                 return;
             }
 
             if (wm->actionFunc != EnWallmas_Die && wm->actor.xzDistToPlayer < 400.0f && IsLocalPlayerClosest())
-                ClaimLeadership(CLAIM_REASON_PROXIMITY);
+                ClaimLeadership(CLAIM_REASON_COOLDOWN);
         }
         wm->collider.base.acFlags &= ~AC_HIT;
 
