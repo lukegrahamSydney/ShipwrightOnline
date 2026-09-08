@@ -5,6 +5,8 @@ LATEST RELEASE IS HERE: https://github.com/lukegrahamSydney/ShipwrightOnline/rel
 
 https://youtu.be/BCDZvdghA6A?si=D5fk3nhATs81vnCC
 
+Thank you to pengy_vt and bladeedge02 for testing
+
 ![Ship of Harkinian](docs/shiptitle.darkmode.png#gh-dark-mode-only)
 ![Ship of Harkinian](docs/shiptitle.lightmode.png#gh-light-mode-only)
 
