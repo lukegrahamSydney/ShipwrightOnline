@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="OOTServer.vcxproj" Id="e46db0f7-21b0-466c-95cb-70a184186ff8" />
+</Solution>

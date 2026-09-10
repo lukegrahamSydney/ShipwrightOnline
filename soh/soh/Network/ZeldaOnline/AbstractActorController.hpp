@@ -8,11 +8,11 @@
 #include "PacketTypes.hpp"
 
 #include <cstddef>
-
-extern "C" {
 #include "functions.h"
 #include <macros.h>
 #include <z64.h>
+
+extern "C" {
 
 extern PlayState* gPlayState;
 void SkelAnime_SetUpdate(SkelAnime* skelAnime);

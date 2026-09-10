@@ -1,7 +1,7 @@
 #include <z64player.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -55,7 +55,6 @@ int ResourceMgr_OTRSigCheck(const char* imgData);
 
 namespace {
 
-std::deque<std::string> sPool;
 struct ManagedPlayerSkin;
 std::unordered_map<std::string, ManagedPlayerSkin>& Skins();
 
@@ -64,13 +63,19 @@ void* Reroot(const std::string& skin, void* vanilla) {
         return vanilla;
     }
 
-    std::string skinned = "__OTR__" + skin + "/" + ((const char*)vanilla + 7);
+    const std::string skinned = "__OTR__" + skin + "/" + ((const char*)vanilla + 7);
     if (!ResourceMgr_FileExists(skinned.c_str())) {
         return vanilla;
     }
 
-    sPool.push_back(std::move(skinned));
-    return (void*)sPool.back().c_str();
+    const size_t size = skinned.size() + 1;
+    char* owned = (char*)malloc(size);
+    if (owned == nullptr) {
+        return vanilla;
+    }
+
+    memcpy(owned, skinned.c_str(), size);
+    return (void*)owned;
 }
 
 struct DLTable {
@@ -187,7 +192,6 @@ void Fill(PlayerSkin& out, const std::string* skin) {
     FillTables(out, skin);
     BuildGroups(out);
 }
-
 
 struct ManagedPlayerSkin : PlayerSkin {
     ManagedPlayerSkin() {

@@ -17,7 +17,7 @@
 #include "ActorControllers/DekuScrubController.hpp"
 #include "ActorControllers/NutsballController.hpp"
 #include "ActorControllers/BossGomaController.hpp"
-#include "ActorControllers/ENGomaController.hpp"
+#include "ActorControllers/EnGomaController.hpp"
 #include "ActorControllers/HintScrubController.hpp"
 #include "ActorControllers/BgYdanHasiController.hpp"
 #include "ActorControllers/PushBlockController.hpp"
