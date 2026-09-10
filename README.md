@@ -1,13 +1,23 @@
 This is a multiplayer/online mod for SOH. Time, enemies, bosses, various actors, horses, bombs, arrows, boomerangs etc are all synced.
-So far most of the childhood stage is complete. 
 
 It's built MMO-style. Meaning the client is unaware of anyone outside of their own scene and theres no player cap.
 LATEST RELEASE IS HERE: https://github.com/lukegrahamSydney/ShipwrightOnline/releases/latest
 
 https://youtu.be/BCDZvdghA6A?si=D5fk3nhATs81vnCC
 
+<img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/9d737741-d8ca-4d7c-bf03-0547e75d3ab9" />
+
+<img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/4a272801-bbf2-4615-ba7e-dc672440cf54" />
+
+<img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/6374876b-b7ac-4388-a685-292d00048b18" />
+
+<img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/15cba0b7-f31e-4e53-82e4-7b28f0e74c15" />
+
+Thank you to pengy_vt and bladeedge02 for testing
+
 ![Ship of Harkinian](docs/shiptitle.darkmode.png#gh-dark-mode-only)
 ![Ship of Harkinian](docs/shiptitle.lightmode.png#gh-light-mode-only)
+
 
 ## Website
 
