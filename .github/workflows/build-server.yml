@@ -41,16 +41,22 @@ jobs:
     - name: Git Checkout
       uses: actions/checkout@v4
 
+    - name: Install ninja
+      run: choco install ninja -y
+
+    - name: Configure Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Configure
-      run: cmake -S server -B server/build -G "Visual Studio 17 2022" -A x64
+      run: cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      run: cmake --build server/build --config Release
+      run: cmake --build server/build
 
     - name: Upload build
       uses: actions/upload-artifact@v4
       with:
         name: ootserver-windows
         path: |
-          server/build/Release/OOTServer.exe
+          server/build/OOTServer.exe
           server/config.json
