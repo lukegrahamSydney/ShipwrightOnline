@@ -80,6 +80,11 @@ add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>)
 
+# Stop windows.h pulling in winsock 1.1, which collides with winsock2.h
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    add_compile_definitions(_WINSOCKAPI_)
+endif()
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     if(NOT CMAKE_VS_PLATFORM_NAME)
         set(CMAKE_VS_PLATFORM_NAME "x64")
