@@ -271,7 +271,6 @@ void EnKusa_Init(Actor* thisx, PlayState* play) {
         return;
     }
 
-    printf("EnKusa_Init::sizeof()=%u\n", (unsigned int)sizeof(Actor));
     ++this->initCalled;
     EnKusa_SetupWaitObject(this);
 }
