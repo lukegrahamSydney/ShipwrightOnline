@@ -27,13 +27,17 @@ jobs:
     - name: Build
       run: cmake --build server/build --config Release -j
 
+    - name: Stage package
+      run: |
+        mkdir -p package
+        cp server/build/OOTServer package/
+        cp server/config.json package/
+
     - name: Upload build
       uses: actions/upload-artifact@v4
       with:
         name: ootserver-linux
-        path: |
-          server/build/OOTServer
-          server/config.json
+        path: package
 
   build-server-windows:
     runs-on: windows-latest
@@ -53,10 +57,15 @@ jobs:
     - name: Build
       run: cmake --build server/build
 
+    - name: Stage package
+      shell: bash
+      run: |
+        mkdir -p package
+        cp server/build/OOTServer.exe package/
+        cp server/config.json package/
+
     - name: Upload build
       uses: actions/upload-artifact@v4
       with:
         name: ootserver-windows
-        path: |
-          server/build/OOTServer.exe
-          server/config.json
+        path: package
