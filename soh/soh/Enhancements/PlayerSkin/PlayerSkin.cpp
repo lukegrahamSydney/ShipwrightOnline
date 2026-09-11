@@ -49,7 +49,7 @@ extern Gfx** gPlayerSkinFirstPersonRightShoulderDLs;
 extern Gfx** gPlayerSkinFirstPersonForearmDLs;
 extern Gfx** gPlayerSkinFirstPersonRightHandHoldingWeaponDLs;
 
-s32 ResourceMgr_FileExists(const char* filePath);
+u8 ResourceMgr_FileExists(const char* filePath);
 int ResourceMgr_OTRSigCheck(const char* imgData);
 }
 
