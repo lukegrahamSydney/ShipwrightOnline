@@ -1536,12 +1536,6 @@ void BossVa_BodyPhase4(BossVa* this, PlayState* play) {
 }
 
 void BossVa_SetupBodyDeath(BossVa* this, PlayState* play) {
-    printf("SETUP_BODY_DEATH ENTRY: sCsState=%d sBodyState=%d sFightPhase=%d sPhase4HP=%d sKillBari=%d "
-           "timer=%d timer2=%d isDead=%d burst=%d onCeiling=%d unk_1AC=%d unk_1B0=%d "
-           "unk_1A0=%.3f unk_1A4=%.3f unk_1A8=%.3f yOff=%.1f speedXZ=%.2f flags=%08X\n",
-           sCsState, sBodyState, sFightPhase, sPhase4HP, sKillBari, this->timer, this->timer2, this->isDead,
-           this->burst, this->onCeiling, this->unk_1AC, this->unk_1B0, this->unk_1A0, this->unk_1A4, this->unk_1A8,
-           this->actor.shape.yOffset, this->actor.speedXZ, (unsigned)this->actor.flags);
 
     func_800F436C(&this->actor.projectedPos, NA_SE_EN_BALINADE_LEVEL - SFX_FLAG, 1.0f);
     this->actor.flags &= ~(ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE);
