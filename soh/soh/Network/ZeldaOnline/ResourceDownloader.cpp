@@ -5,19 +5,24 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "sox.hpp"
+
+#if defined(_WIN32) || defined(WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace ZeldaOnline {
 
 namespace {
 
-
 const size_t MAX_NAME_LEN = 64;
 const size_t MAX_BODY_BYTES = 64u * 1024u * 1024u;
 const int READ_CHUNK = 16 * 1024;
 const int READ_TIMEOUT_SECONDS = 15;
-
 
 void SetReadTimeout(SoxHandle sock) {
 #if defined(_WIN32) || defined(WIN32)
@@ -32,7 +37,15 @@ void SetReadTimeout(SoxHandle sock) {
 }
 
 const char* DownloadDir() {
-    return "mods/downloaded";
+    return "mods/downloaded"; 
+}
+
+unsigned long CurrentProcessId() {
+#if defined(_WIN32) || defined(WIN32)
+    return (unsigned long)GetCurrentProcessId();
+#else
+    return (unsigned long)getpid();
+#endif
 }
 
 bool SplitUrl(const std::string& url, std::string& host, int& port, std::string& path) {
@@ -62,7 +75,6 @@ bool SplitUrl(const std::string& url, std::string& host, int& port, std::string&
     host = authority;
     return !host.empty();
 }
-
 
 int ReadHeaders(SoxHandle sock, std::string& bodyStart, long& contentLength) {
     std::string head;
@@ -111,7 +123,7 @@ int ReadHeaders(SoxHandle sock, std::string& bodyStart, long& contentLength) {
     return status;
 }
 
-}
+} // namespace
 
 bool ResourceDownloader::IsSafeFileName(const std::string& name) {
     if (name.empty() || name.size() > MAX_NAME_LEN) {
@@ -341,7 +353,13 @@ DownloadedFile ResourceDownloader::Fetch(ResourceDownloader* self, const std::st
     std::filesystem::create_directories(DownloadDir(), ec);
 
     std::string finalPath = std::string(DownloadDir()) + "/" + fileName;
-    std::string tempPath = finalPath + ".part";
+    std::string tempPath = finalPath + "." + std::to_string(CurrentProcessId()) + ".part";
+
+    if (std::filesystem::exists(finalPath, ec)) {
+        result.filePath = finalPath;
+        result.success = true;
+        return result;
+    }
 
     {
         std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
@@ -356,9 +374,24 @@ DownloadedFile ResourceDownloader::Fetch(ResourceDownloader* self, const std::st
         }
     }
 
-    std::filesystem::remove(finalPath, ec);
+    if (std::filesystem::exists(finalPath, ec)) {
+        std::filesystem::remove(tempPath, ec);
+        result.filePath = finalPath;
+        result.success = true;
+        return result;
+    }
+
     std::filesystem::rename(tempPath, finalPath, ec);
     if (ec) {
+        std::filesystem::remove(tempPath, ec);
+
+        std::error_code existsEc;
+        if (std::filesystem::exists(finalPath, existsEc)) {
+            result.filePath = finalPath;
+            result.success = true;
+            return result;
+        }
+
         result.error = "could not move into place";
         return result;
     }
