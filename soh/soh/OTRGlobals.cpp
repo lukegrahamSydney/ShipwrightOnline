@@ -1594,7 +1594,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         Anchor::Instance->Enable();
     }
 
-    if (CVarGetInteger("gZeldaOnline.Enabled", 0)) {
+    if (CVarGetInteger("gZeldaOnline.Enabled", 1)) {
         ZeldaOnline::ZeldaOnlineClient::Instance->Enable();
     }
 

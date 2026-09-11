@@ -238,7 +238,7 @@ ZeldaOnlineClient::ZeldaOnlineClient() {
 }
 
 void ZeldaOnlineClient::Connect() {
-    m_host = CVarGetString("gZeldaOnline.Host", "107.175.79.45");
+    m_host = CVarGetString("gZeldaOnline.Host", "awu.fks.mybluehost.me");
     m_port = CVarGetInteger("gZeldaOnline.Port", 21050);
     m_nickName = CVarGetString("gZeldaOnline.Nickname", "Player");
 
@@ -248,7 +248,7 @@ void ZeldaOnlineClient::Connect() {
     ZeldaOnlineRoomWindow::Instance->SetConnecting(true);
     ZNetworking::Enable(m_host.c_str(), m_port);
 
-    m_fileServerUrl = CVarGetString("gZeldaOnline.FileServer", "");
+    m_fileServerUrl = CVarGetString("gZeldaOnline.FileServer", "http://awu.fks.mybluehost.me/");
     RegisterNetworkingHook(true);
 
     auto missingArchives = MissingArchives(archives);

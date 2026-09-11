@@ -429,10 +429,10 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         if (m_fieldsLoaded)
             return;
 
-        snprintf(m_hostBuffer, sizeof(m_hostBuffer), "%s", CVarGetString("gZeldaOnline.Host", "107.175.79.45"));
+        snprintf(m_hostBuffer, sizeof(m_hostBuffer), "%s", CVarGetString("gZeldaOnline.Host", "awu.fks.mybluehost.me"));
         m_portValue = CVarGetInteger("gZeldaOnline.Port", 21050);
         snprintf(m_nameBuffer, sizeof(m_nameBuffer), "%s", CVarGetString("gZeldaOnline.Nickname", "Player"));
-        snprintf(m_fileServerBuffer, sizeof(m_fileServerBuffer), "%s", CVarGetString("gZeldaOnline.FileServer", ""));
+        snprintf(m_fileServerBuffer, sizeof(m_fileServerBuffer), "%s", CVarGetString("gZeldaOnline.FileServer", "http://awu.fks.mybluehost.me/"));
         m_autoConnect = CVarGetInteger("gZeldaOnline.AutoConnect", 0) != 0;
 
         m_fieldsLoaded = true;

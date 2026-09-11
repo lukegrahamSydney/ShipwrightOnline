@@ -447,7 +447,7 @@ namespace ZeldaOnline
 	{
 		using namespace ActorID;
 
-		//Player spawning it
+		//0 means either the player spawned it or a non-networked actor spawned it
 		if (spawnerNetID == 0)
 		{
 			switch (actorID)
@@ -460,11 +460,14 @@ namespace ZeldaOnline
 				case ACTOR_EN_SKB:
 				case ACTOR_EN_ISHI:
 				case ACTOR_EN_KUSA:
+				case ACTOR_EN_NIW:
 					return true;
 				default:
 					return false;
 			}
 		}
+		
+		//You can do a simple check here to see if the spawnerNetID exists and it matches the actorID, return true (or have a more sophisicated per-actor check of what they are allowed to spawn)
 		return true;
 	}
 

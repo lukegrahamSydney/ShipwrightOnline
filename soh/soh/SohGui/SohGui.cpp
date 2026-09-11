@@ -196,9 +196,10 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mTimeDisplayWindow);
     mAnchorRoomWindow = std::make_shared<AnchorRoomWindow>(CVAR_WINDOW("AnchorRoom"), "Anchor Room");
     gui->AddGuiWindow(mAnchorRoomWindow);
+     
 
-
-    mZeldaOnlineRoomWindow = std::make_shared<ZeldaOnline::ZeldaOnlineRoomWindow>("gZeldaOnline.Enabled", false, "ZeldaOnline");
+    CVarSetInteger("gZeldaOnline.Enabled", CVarGetInteger("gZeldaOnline.Enabled", 1));
+    mZeldaOnlineRoomWindow = std::make_shared<ZeldaOnline::ZeldaOnlineRoomWindow>("", CVarGetInteger("gZeldaOnline.Enabled", 1) == 1, "ZeldaOnline");
     ZeldaOnline::ZeldaOnlineRoomWindow::Instance = mZeldaOnlineRoomWindow.get();
     gui->AddGuiWindow(mZeldaOnlineRoomWindow);
 

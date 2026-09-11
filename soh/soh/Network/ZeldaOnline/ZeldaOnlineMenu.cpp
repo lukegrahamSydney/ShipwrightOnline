@@ -18,7 +18,7 @@ static void ShowZeldaOnlineWindow() {
 }
 
 void ZeldaOnlineMainMenu(WidgetInfo& info) {
-    bool isEnabled = CVarGetInteger("gZeldaOnline.Enabled", 0) != 0;
+    bool isEnabled = CVarGetInteger("gZeldaOnline.Enabled", 1) != 0;
 
     ImGui::SeparatorText("Zelda Online");
 
@@ -28,7 +28,7 @@ void ZeldaOnlineMainMenu(WidgetInfo& info) {
 
     if (ImGui::Button(buttonLabel, ImVec2(-1.0f, 0.0f))) {
         if (isEnabled) {
-            CVarClear("gZeldaOnline.Enabled");
+            CVarSetInteger("gZeldaOnline.Enabled", 0);
 
             if (SohGui::mZeldaOnlineRoomWindow != nullptr)
                 SohGui::mZeldaOnlineRoomWindow->Hide();
