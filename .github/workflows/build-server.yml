@@ -1,0 +1,56 @@
+name: build-server
+on:
+  push:
+    paths:
+      - 'server/**'
+      - '.github/workflows/build-server.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/build-server.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-server-linux:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure
+      run: cmake -S server -B server/build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build server/build --config Release -j
+
+    - name: Upload build
+      uses: actions/upload-artifact@v4
+      with:
+        name: ootserver-linux
+        path: |
+          server/build/OOTServer
+          server/config.json
+
+  build-server-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure
+      run: cmake -S server -B server/build -G "Visual Studio 17 2022" -A x64
+
+    - name: Build
+      run: cmake --build server/build --config Release
+
+    - name: Upload build
+      uses: actions/upload-artifact@v4
+      with:
+        name: ootserver-windows
+        path: |
+          server/build/Release/OOTServer.exe
+          server/config.json
