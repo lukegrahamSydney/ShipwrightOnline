@@ -75,6 +75,12 @@ struct PlayerListActionEventConnect {
 
 class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
   private:
+    static constexpr float LONG_PRESS_SECONDS = 0.5f;
+
+    ImGuiID m_heldRowId = 0;
+    float m_heldRowTime = 0.0f;
+    bool m_heldRowFired = false;
+
     std::vector<PlayerEntry> m_players;
     std::vector<SkinOption> m_availableSkins;
     std::string m_currentSkin;
@@ -185,6 +191,44 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         ImGui::Selectable(label.c_str());
         ImGui::PopStyleColor();
 
+        const ImGuiID rowId = ImGui::GetItemID();
+        bool openContext = false;
+
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            if (m_heldRowId != rowId) {
+                m_heldRowId = rowId;
+                m_heldRowTime = 0.0f;
+                m_heldRowFired = false;
+            }
+
+            m_heldRowTime += ImGui::GetIO().DeltaTime;
+
+            if (!m_heldRowFired && m_heldRowTime >= LONG_PRESS_SECONDS) {
+                m_heldRowFired = true;
+                openContext = true;
+            }
+        } else if (m_heldRowId == rowId && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            m_heldRowId = 0;
+            m_heldRowTime = 0.0f;
+            m_heldRowFired = false;
+        }
+
+        if (openContext)
+            ImGui::OpenPopup("##zo_row_context");
+
+        if (!m_heldRowFired && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            if (entry.pendingInvitePartyID != 0) {
+                inviteEvent.actionEvent.action = PlayerListAction::AcceptInvite;
+                inviteEvent.networkID = entry.networkID;
+                inviteEvent.partyID = entry.pendingInvitePartyID;
+                pending = &inviteEvent.actionEvent;
+            } else if (!entry.isInParty && m_hasParty) {
+                inviteEvent.actionEvent.action = PlayerListAction::Invite;
+                inviteEvent.networkID = entry.networkID;
+                pending = &inviteEvent.actionEvent;
+            }
+        }
+
         if (entry.sceneNum >= 0) {
             std::string location = LocationLabel(entry);
 
@@ -211,7 +255,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
             }
         }
 
-        if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::BeginPopupContextItem("##zo_row_context")) {
             ImGui::TextDisabled("%s", entry.name.c_str());
             ImGui::Separator();
 
@@ -432,7 +476,8 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         snprintf(m_hostBuffer, sizeof(m_hostBuffer), "%s", CVarGetString("gZeldaOnline.Host", "awu.fks.mybluehost.me"));
         m_portValue = CVarGetInteger("gZeldaOnline.Port", 21050);
         snprintf(m_nameBuffer, sizeof(m_nameBuffer), "%s", CVarGetString("gZeldaOnline.Nickname", "Player"));
-        snprintf(m_fileServerBuffer, sizeof(m_fileServerBuffer), "%s", CVarGetString("gZeldaOnline.FileServer", "http://awu.fks.mybluehost.me/"));
+        snprintf(m_fileServerBuffer, sizeof(m_fileServerBuffer), "%s",
+                 CVarGetString("gZeldaOnline.FileServer", "http://awu.fks.mybluehost.me/"));
         m_autoConnect = CVarGetInteger("gZeldaOnline.AutoConnect", 0) != 0;
 
         m_fieldsLoaded = true;
