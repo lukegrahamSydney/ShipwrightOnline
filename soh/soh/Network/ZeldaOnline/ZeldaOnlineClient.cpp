@@ -274,6 +274,8 @@ void ZeldaOnlineClient::Disconnect() {
 
 void ZeldaOnlineClient::Enable() {
     m_skinRef = CVarGetString("gZeldaOnline.Skin", "");
+    LoadPartySettings();
+
     ZeldaOnlineRoomWindow::Instance->CenterAndExpand();
 
     ZeldaOnlineRoomWindow::Instance->Show();
@@ -443,6 +445,15 @@ void ZeldaOnlineClient::Enable() {
 
                 WritePacket(newPacket(CLIENT_PACKET_UPDATE_PARTY_SETTINGS) << BuildPartySettingsJSON(partySettings));
                 SetPartySettings(partySettings);
+
+                CVarSetInteger("gZeldaOnline.Party.PrivateDungeons", m_partySettings.privateDungeons ? 1 : 0);
+                CVarSetInteger("gZeldaOnline.Party.ExtraEnemies", m_partySettings.extraEnemies ? 1 : 0);
+                CVarSetFloat("gZeldaOnline.Party.ExtraEnemyWeight", m_partySettings.extraEnemyWeight);
+                CVarSetInteger("gZeldaOnline.Party.HealthMultiplier", m_partySettings.healthMultiplier ? 1 : 0);
+                CVarSetFloat("gZeldaOnline.Party.EnemyHealthWeight", m_partySettings.enemyHealthWeight);
+                CVarSetFloat("gZeldaOnline.Party.BossHealthWeight", m_partySettings.bossHealthWeight);
+
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             } break;
 
             default:
@@ -520,6 +531,20 @@ void ZeldaOnlineClient::SetPartySettings(const PartySettings& settings) {
             ReloadSceneInPlace(gPlayState);
     }
     m_partySettings = settings;
+
+
+}
+
+void ZeldaOnlineClient::LoadPartySettings() {
+    m_partySettings.privateDungeons = CVarGetInteger("gZeldaOnline.Party.PrivateDungeons", 0) != 0;
+    m_partySettings.extraEnemies = CVarGetInteger("gZeldaOnline.Party.ExtraEnemies", 0) != 0;
+    m_partySettings.extraEnemyWeight = CVarGetFloat("gZeldaOnline.Party.ExtraEnemyWeight", 1.0f);
+    m_partySettings.healthMultiplier = CVarGetInteger("gZeldaOnline.Party.HealthMultiplier", 0) != 0;
+    m_partySettings.enemyHealthWeight = CVarGetFloat("gZeldaOnline.Party.EnemyHealthWeight", 1.0f);
+    m_partySettings.bossHealthWeight = CVarGetFloat("gZeldaOnline.Party.BossHealthWeight", 1.0f);
+
+    if (ZeldaOnlineRoomWindow::Instance != nullptr)
+        ZeldaOnlineRoomWindow::Instance->GetPartySettings() = m_partySettings;
 }
 
 void ZeldaOnlineClient::OnConnected() {
@@ -2880,6 +2905,7 @@ int ZeldaOnlineClient::RollNeighbourCount(f32 weight) const {
 
     return count > m_maxNeighbours ? m_maxNeighbours : count;
 }
+
 float ZeldaOnlineClient::RollHealthMultiplier(f32 weight, f32 settingWeight) const {
     if (m_partyID == 0 || !m_partySettings.privateDungeons || !m_partySettings.healthMultiplier)
         return 1.0f;
@@ -2890,10 +2916,10 @@ float ZeldaOnlineClient::RollHealthMultiplier(f32 weight, f32 settingWeight) con
     if (weight <= 0.0f || settingWeight <= 0.0f)
         return 1.0f;
 
-    if (m_partySize < 2)
+    if (m_partySize < 1)
         return 1.0f;
 
-    f32 multiplier = 1.0f + ((m_partySize - 1) * m_healthWeightPerPlayer * weight * settingWeight);
+    f32 multiplier = 1.0f + (m_partySize * m_healthWeightPerPlayer * weight * settingWeight);
 
     if (multiplier < 1.0f)
         multiplier = 1.0f;

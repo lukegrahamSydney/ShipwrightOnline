@@ -133,6 +133,7 @@ class ZeldaOnlineClient : public ZNetworking {
     bool ParsePartySettingsJSON(const std::string& partySettings, PartySettings& out);
 
     void SetPartySettings(const PartySettings& settings);
+    void LoadPartySettings();
     static bool SplitSkinRef(const std::string& ref, std::string& resourceName,
                              std::vector<std::string>& archiveNames) {
         size_t bar = ref.find('|');
