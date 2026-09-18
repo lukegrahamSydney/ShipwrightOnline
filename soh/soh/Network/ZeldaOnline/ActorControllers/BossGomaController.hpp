@@ -78,6 +78,11 @@ class BossGomaController : public AbstractBossController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
     const char* GetTitleCard() const override {
         return gGohmaTitleCardENGTex;
     }

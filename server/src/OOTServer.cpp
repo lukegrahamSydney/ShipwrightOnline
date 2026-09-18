@@ -8,6 +8,7 @@
 #include "Packet.hpp"
 #include "PacketTypes.hpp"
 #include "ActorID.hpp"
+#include "PacketStrings.hpp"
 
 
 namespace ZeldaOnline
@@ -17,7 +18,7 @@ namespace ZeldaOnline
 	static const int HANDSHAKE_TIMEOUT_SECONDS = 10;
 
 	//Must be 10 characters
-	static const std::string ALLOWED_VERSION = "BETA000001";
+	static const std::string ALLOWED_VERSION = "BETA000002";
 
 #ifndef OOT_MAX_POLL_SOCKETS
 #define OOT_MAX_POLL_SOCKETS FD_SETSIZE
@@ -66,7 +67,6 @@ namespace ZeldaOnline
 			soxCloseSocket(m_listenSocket);
 		soxCleanup();
 	}
-
 	void OOTServer::LoadConfig()
 	{
 		try
@@ -86,24 +86,27 @@ namespace ZeldaOnline
 				return;
 			}
 
+			m_daySpeed = (unsigned int)cfg.value("daySpeed", 320);
+			m_nightSpeed = (unsigned int)cfg.value("nightSpeed", 640);
+
 			if (cfg.contains("skins") && cfg["skins"].is_array())
 			{
 				for (const auto& entry : cfg["skins"]) {
 					if (!entry.is_object())
 						continue;
 
-					std::string displayName = entry.value("displayName", std::string());
-					std::string reference = entry.value("referenceName", std::string());
+					PlayerSkin skin;
+					skin.displayName = entry.value("displayName", std::string());
+					skin.referenceName = entry.value("referenceName", std::string());
+					skin.pitch = entry.value("pitch", 1.0f);
 
-					if (reference.empty())
+					if (skin.referenceName.empty())
 						continue;
 
-					m_skins.emplace_back(displayName, reference);
+					m_skins.push_back(skin);
 				}
 			}
 
-			m_daySpeed = (unsigned int)cfg.value("daySpeed", 320);
-			m_nightSpeed = (unsigned int)cfg.value("nightSpeed", 640);
 		}
 		catch (const std::exception& e)
 		{
@@ -603,7 +606,7 @@ namespace ZeldaOnline
 
 	bool OOTServer::onHandshake(ClientConnection* connection, ByteStream& packet, std::string* error)
 	{
-
+		 
 		if (packet.BytesLeft() < 1)
 			return false;
 
@@ -725,14 +728,13 @@ namespace ZeldaOnline
 			ByteStream skinPacket = newPacket(SERVER_PACKET_POPULATE_SKINS) << PackedUInt2((unsigned int)(m_skins.size() & 0xFFFF));
 			for (auto& skin : m_skins)
 			{
-				auto& displayName = skin.first;
-				auto& reference = skin.second;
-
-				skinPacket << PackedUInt2((uint16_t)displayName.length()) << displayName;
-				skinPacket << PackedUInt2((uint16_t)reference.length()) << reference;
+				skinPacket << PackedUInt2((uint16_t)skin.displayName.length()) << skin.displayName;
+				skinPacket << PackedUInt2((uint16_t)skin.referenceName.length()) << skin.referenceName;
+				skinPacket << PackedFloat4(skin.pitch);
 			}
 			player->SendPacket(skinPacket);
 		}
+
 	}
 
 	static bool IsClusterDedupActor(unsigned short actorId) {
@@ -1328,7 +1330,7 @@ namespace ZeldaOnline
 			}
 			else break;
 
-			printf("FORWARDING FLAG: %i:%i\n", flagType, flag);
+			std::printf("FORWARDING FLAG: %i:%i\n", flagType, flag);
 			ByteStream packet = newPacket(SERVER_PACKET_SCENE_FLAG);
 			packet << PackedUInt1(flagType);
 			packet << PackedUInt2(flag);
@@ -1579,10 +1581,19 @@ namespace ZeldaOnline
 			if (player->PartyGetID() != 0)
 				break;
 
+			auto settingsJSON = data.ReadString(data.BytesLeft());
+
 			SetPlayerParty(player, Party::Create());
 
-			player->SendPacket(newPacket(SERVER_PACKET_PARTY_JOIN)
-				<< PackedUInt4(player->PartyGetID()) << PackedUInt1(1));
+			auto& party = player->GetParty();
+			if (party)
+			{
+				party->SetSettings(settingsJSON);
+				auto admin = party->GetAdmin();
+
+				player->SendPacket(newPacket(SERVER_PACKET_PARTY_JOIN)
+					<< PackedUInt4(player->PartyGetID()) << PackedUInt2(admin ? admin->NetworkID() : 0) << party->Settings());
+			}
 		}
 		break;
 
@@ -1611,9 +1622,7 @@ namespace ZeldaOnline
 				break;
 
 			party->AddInvitedPlayer(otherPlayer->Guid());
-			otherPlayer->SendPacket(newPacket(SERVER_PACKET_PARTY_INVITE)
-				<< PackedUInt2((unsigned int)(player->NetworkID()))
-				<< PackedUInt4(party->ID()));
+			otherPlayer->SendPacket(newPacket(SERVER_PACKET_PARTY_INVITE) << PackedUInt2((unsigned int)(player->NetworkID())) << PackedUInt4(party->ID()));
 		}
 		break;
 
@@ -1646,8 +1655,9 @@ namespace ZeldaOnline
 
 			SetPlayerParty(player, party);
 
-			player->SendPacket(newPacket(SERVER_PACKET_PARTY_JOIN)
-				<< PackedUInt4(partyID) << PackedUInt1(0u));
+			auto admin = party->GetAdmin();
+			player->SendPacket(newPacket(SERVER_PACKET_PARTY_JOIN) << PackedUInt4(partyID) << PackedUInt2(admin ? admin->NetworkID() : 0) << party->Settings());
+
 
 			for (Player* member : party->Members())
 			{
@@ -1695,14 +1705,15 @@ namespace ZeldaOnline
 
 			SetPlayerParty(player, nullptr);
 
+			auto admin = party->GetAdmin();
+
 			player->SendPacket(newPacket(SERVER_PACKET_PARTY_JOIN)
-				<< PackedUInt4(0u) << PackedUInt1(0u));
+				<< PackedUInt4(0u) << PackedUInt2(0u));
 
 			for (Player* member : formerMembers)
 			{
 				if (member != player)
-					member->SendPacket(newPacket(SERVER_PACKET_PARTY_MEMBER_REMOVE)
-						<< PackedUInt2((unsigned int)(player->NetworkID())));
+					member->SendPacket(newPacket(SERVER_PACKET_PARTY_MEMBER_REMOVE) << PackedUInt2((unsigned int)(player->NetworkID())) << PackedUInt2(admin ? admin->NetworkID() : 0));
 			}
 		}
 		break;
@@ -1713,7 +1724,7 @@ namespace ZeldaOnline
 
 			bool enabled = data.Read<PackedUInt1>().value() != 0;
 
-			player->SetPartyScenes(enabled);
+			//player->SetPartyScenes(enabled);
 		}
 		break;
 
@@ -1839,6 +1850,32 @@ namespace ZeldaOnline
 		}
 		break;
 
+		case CLIENT_PACKET_CHAT_MESSAGE:
+		{
+			auto text = data.ReadString(data.BytesLeft());
+
+			Scene* scene = player->CurrentScene();
+			if (scene == nullptr)
+				break;
+
+			ByteStream packet = newPacket(SERVER_PACKET_CHAT_MESSAGE);
+			packet << PackedUInt2(player->NetworkID()) << text;
+
+			scene->SendToAll(packet, nullptr);
+		}
+		break;
+
+		case CLIENT_PACKET_UPDATE_PARTY_SETTINGS:
+		{
+			auto& party = player->GetParty();
+			if (!party)
+				break;
+
+			party->SetSettings(data.BytesLeft() ? data.ReadString(data.BytesLeft()) : std::string());
+			party->SendToAll(newPacket(SERVER_PACKET_UPDATE_PARTY_SETTINGS) << party->Settings(), player);
+		}
+		break;
+
 		default:
 			std::printf("OOTServer: unknown packet id %u from player %d\n",
 				clientPacketID, player->NetworkID());
@@ -1886,11 +1923,12 @@ namespace ZeldaOnline
 			party->RemoveMember(player);
 			player->SetParty(nullptr);
 
+			auto admin = party->GetAdmin();
 			for (Player* member : formerMembers)
 			{
 				if (member != player)
 					member->SendPacket(newPacket(SERVER_PACKET_PARTY_MEMBER_REMOVE)
-						<< PackedUInt2((unsigned int)(player->NetworkID())));
+						<< PackedUInt2((unsigned int)(player->NetworkID())) << PackedUInt2(admin ? admin->NetworkID() : 0));
 			}
 
 			if (party->MemberCount() == 0)

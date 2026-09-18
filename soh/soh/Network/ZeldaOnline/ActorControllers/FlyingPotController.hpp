@@ -47,6 +47,9 @@ class FlyingPotController : public AbstractActorController {
         return ID_UNKNOWN;
     }
 
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
 
     bool HitWouldReact() const {
         EnTuboTrap* pot = Typed();

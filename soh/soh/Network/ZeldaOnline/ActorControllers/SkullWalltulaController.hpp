@@ -15,6 +15,7 @@ void func_80B0E5E0(EnSw* sw, PlayState* play);
 void func_80B0E728(EnSw* sw, PlayState* play);
 void func_80B0E90C(EnSw* sw, PlayState* play);
 void func_80B0E9BC(EnSw* sw, PlayState* play);
+void EnSw_CrossProduct(Vec3f* a, Vec3f* b, Vec3f* dst);
 
 extern AnimationInfo* gEnSwAnimationInfo;
 }
@@ -47,6 +48,41 @@ class SkullWalltulaController : public AbstractActorController {
         };
         *count = sizeof(sTable) / sizeof(sTable[0]);
         return sTable;
+    }
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+    void SpawnNeighbours(PlayState* play) override {
+        EnSw* sw = Typed();
+
+        if (IsGoldSkulltula() || sw->unk_430 == NULL)
+            return;
+
+        Vec3f normal;
+        normal.x = COLPOLY_GET_NORMAL(sw->unk_430->normal.x);
+        normal.y = COLPOLY_GET_NORMAL(sw->unk_430->normal.y);
+        normal.z = COLPOLY_GET_NORMAL(sw->unk_430->normal.z);
+
+        Vec3f up = { 0.0f, 1.0f, 0.0f };
+        Vec3f tangentU;
+        Vec3f tangentV;
+
+        EnSw_CrossProduct(&normal, &up, &tangentU);
+
+        f32 mag = Math3D_Vec3fMagnitude(&tangentU);
+        if (mag < 0.001f)
+            return;
+
+        mag = 1.0f / mag;
+        tangentU.x *= mag;
+        tangentU.y *= mag;
+        tangentU.z *= mag;
+
+        EnSw_CrossProduct(&normal, &tangentU, &tangentV);
+
+        SpawnNeighboursWall(play, 1.0f, normal, tangentU, tangentV);
     }
 
     u8 CurrentActionIndex() const {

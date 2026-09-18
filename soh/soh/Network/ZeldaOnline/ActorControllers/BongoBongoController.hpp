@@ -142,6 +142,8 @@ class BongoBongoController : public AbstractBossController {
         }
     }
 
+
+
     BossSst* Typed() const {
         return reinterpret_cast<BossSst*>(m_actor);
     }
@@ -257,6 +259,11 @@ class BongoBongoController : public AbstractBossController {
 
     bool IsHead() const {
         return Typed()->actor.params == BONGO_HEAD;
+    }
+
+    void InitActorHealth() override {
+        if (IsHead())
+            Typed()->actor.colChkInfo.health = (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
     }
 
     const char* GetTitleCard() const override {

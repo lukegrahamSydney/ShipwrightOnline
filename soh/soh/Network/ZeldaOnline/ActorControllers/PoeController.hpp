@@ -81,6 +81,14 @@ class PoeController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
     u8 CurrentActionIndex() const {
         size_t count;
         const PohActionFunc* table = ActionTable(&count);

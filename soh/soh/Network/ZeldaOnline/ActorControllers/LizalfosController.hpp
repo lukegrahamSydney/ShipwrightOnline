@@ -6,6 +6,7 @@
 
 extern "C" {
 #include "src/overlays/actors/ovl_En_Zf/z_en_zf.h"
+#include "src/overlays/actors/ovl_En_Test/z_en_test.h"
 #include "objects/object_zf/object_zf.h"
 
 void EnZf_DropIn(EnZf* zf, PlayState* play);
@@ -72,6 +73,19 @@ class LizalfosController : public AbstractActorController {
         };
         *count = sizeof(sTable) / sizeof(sTable[0]);
         return sTable;
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+
+        if (m_originalParams < ENZF_TYPE_LIZALFOS_MINIBOSS_A)
+            SpawnNeighboursGround(play, 1.0f);
+
+    }
+
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
     }
 
     u8 CurrentActionIndex() const {

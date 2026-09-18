@@ -73,6 +73,11 @@ class PeahatController : public AbstractActorController {
         return Typed()->actor.params == PEAHAT_TYPE_FLYING;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     static const EnPeehatActionFunc* ActionTable(size_t* count) {
         static const EnPeehatActionFunc sTable[] = {
             EnPeehat_Ground_StateGround,

@@ -98,7 +98,10 @@ namespace ZeldaOnline
 		}
 
 		uint32_t PartyHash() const {
-			return m_partyScenes ? PartyGetID() : 0U;
+
+			if (m_party != nullptr)
+				return m_party->PrivateDungeons();
+			return 0U;
 		}
 
 		void SetPaused(bool paused) {
@@ -126,10 +129,6 @@ namespace ZeldaOnline
 		void SetParty(std::shared_ptr<Party> party)
 		{
 			m_party = std::move(party);
-		}
-
-		void SetPartyScenes(bool enabled) {
-			m_partyScenes = enabled;
 		}
 
 		bool MarkInitPlayerList() {
@@ -161,7 +160,6 @@ namespace ZeldaOnline
 	private:
 		unsigned int m_partyHash = 0;
 		bool m_paused = false;
-		bool m_partyScenes = false;
 		bool m_initedPlayerList = false;
 		int m_entranceID = -1;
 		uint8_t m_age = 1;

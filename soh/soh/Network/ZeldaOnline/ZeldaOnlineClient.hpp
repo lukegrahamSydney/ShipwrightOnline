@@ -18,7 +18,8 @@
 #include "ResourceDownloader.hpp"
 #include <ctime>
 #include "Guid.hpp"
-#include "ZeldaOnlineRoomWindow.hpp"
+#include "PartySettings.hpp"
+
 
 
 
@@ -59,6 +60,7 @@ class ZeldaOnlineClient : public ZNetworking {
     int m_lastScene = -1;
     int m_lastRoom = -1;
     int m_removeNametagTimer = 0;
+    int m_chatVisibleTimer = 0;
     int m_clearPlayerListStatusTimer = 0;
 
     u32 m_nextLocalID = 1;
@@ -68,8 +70,12 @@ class ZeldaOnlineClient : public ZNetworking {
 
     bool m_applyingRemoteSpawn = false;
     uint32_t m_partyID = 0U;
+    PartySettings m_partySettings;
 
-
+    int m_partySize = 1;
+    int m_maxNeighbours = 2;
+    float m_neighbourChancePerPlayer = 0.25f;
+    f32 m_healthWeightPerPlayer = 0.25f;
     bool m_sendFullPlayerProps = true;
     ByteStream m_lastPlayerProps;
     bool m_hooksEnabled = false;
@@ -82,6 +88,7 @@ class ZeldaOnlineClient : public ZNetworking {
     uint64_t m_bytesReceived = 0;
     time_t m_lastReportTime = 0;
     int m_showConnectionStatusTimer = 0;
+
 
     std::string m_skinRef = "";
     std::string m_skinName = "";
@@ -122,7 +129,10 @@ class ZeldaOnlineClient : public ZNetworking {
         ZNetworking::Disable();
     }
 
+    std::string BuildPartySettingsJSON(const PartySettings& settings);
+    bool ParsePartySettingsJSON(const std::string& partySettings, PartySettings& out);
 
+    void SetPartySettings(const PartySettings& settings);
     static bool SplitSkinRef(const std::string& ref, std::string& resourceName,
                              std::vector<std::string>& archiveNames) {
         size_t bar = ref.find('|');
@@ -240,7 +250,7 @@ class ZeldaOnlineClient : public ZNetworking {
                                     s16 rotX, s16 rotY, s16 rotZ, s16 params);
 
     Actor* SpawnWarpOrHeart(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params);
-    Actor* SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params);
+    Actor* SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ, s16 params, bool neighbourSpawn = false);
     Actor* SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                              s16 params);
     bool RequestRoomSceneChange(bool roomTransition = false);
@@ -272,6 +282,13 @@ class ZeldaOnlineClient : public ZNetworking {
     const std::string& LocalSkinName() const {
         return m_skinName;
     }
+
+    
+    //TO be used with enemies spawning neighbours
+    int RollNeighbourCount(f32 weight = 1.0f) const;
+    float RollHealthMultiplier(f32 weight, f32 settingWeight) const; 
+    float RollEnemyHealthMultiplier(f32 weight = 1.0f) const;
+    float RollBossHealthMultiplier(f32 weight = 1.0f) const;
 };
 }
 

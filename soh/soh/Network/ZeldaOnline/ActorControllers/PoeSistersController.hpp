@@ -109,6 +109,11 @@ class PoeSistersController : public AbstractActorController {
         }
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
     u8 CurrentAnimIndex() const {
         const char* cur = (const char*)Typed()->skelAnime.animation;
         if (cur == nullptr)

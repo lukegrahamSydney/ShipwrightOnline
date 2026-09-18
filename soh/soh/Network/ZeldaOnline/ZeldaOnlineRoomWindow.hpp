@@ -10,6 +10,9 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <cstdlib>
+#include <SDL2/SDL.h>
+#include "PartySettings.hpp"
 
 const char* ResolveSceneID(int sceneID, int roomID);
 
@@ -17,6 +20,7 @@ namespace ZeldaOnline {
 struct SkinOption {
     std::string displayName;
     std::string referenceName;
+    float pitch = 1.0f;
 };
 
 struct PlayerEntry {
@@ -36,13 +40,15 @@ enum class PlayerListAction {
     DeclineInvite,
     CreateParty,
     LeaveParty,
-    SetPartyScenes,
+    PartySettingChanged,
     TeleportTo,
     ChangeSkin,
+    ToggleSkinPitch,
     ChangeName,
     Connect,
     Disconnect,
-    UnstuckMe
+    UnstuckMe,
+    Chat
 };
 
 struct PlayerListActionEvent {
@@ -58,6 +64,13 @@ struct PlayerListActionEventInvite {
 struct PlayerListActionEventText {
     PlayerListActionEvent actionEvent;
     std::string text;
+};
+
+struct PlayerListActionEventMultiVar {
+    PlayerListActionEvent actionEvent;
+    std::string text;
+    int32_t intValue = 0;
+    float floatValue = 0.0f;
 };
 
 struct PlayerListActionEventToggle {
@@ -81,15 +94,32 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     float m_heldRowTime = 0.0f;
     bool m_heldRowFired = false;
 
+    bool m_chatButtonShown = false;
+    bool m_chatBoxOpen = false;
+    float m_chatBoxAnim = 0.0f;
+    bool m_chatBoxFocus = false;
+    bool m_applySkinPitch = true;
+    bool m_chatSettingsLoaded = false;
+    bool m_chatKeyboardShown = false;
+    bool m_chatKeyboardProbed = false;
+    bool m_chatButtonPlaced = false;
+    float m_chatButtonX = -1.0f;
+    float m_chatButtonY = -1.0f;
+    char m_chatBuffer[512] = "";
+
     std::vector<PlayerEntry> m_players;
     std::vector<SkinOption> m_availableSkins;
     std::string m_currentSkin;
     std::function<void(const PlayerListActionEvent*)> m_onAction;
     bool m_hasParty = false;
-    bool m_partyScenes = false;
+    bool m_partyAdmin = false;
+    uint32_t m_partyAdminID = 0;
+    bool m_partySettingsOpen = false;
+    PartySettings m_partySettings;
+    PartySettings m_partySettingsBackup;
     std::string m_statusText;
     ImVec4 m_statusColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-    char m_nameBuffer[100] = "";
+    char m_nameBuffer[256] = "";
     bool m_recenterNextFrame = false;
 
     bool m_beginAutoConnect = false;
@@ -97,9 +127,9 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     bool m_connecting = false;
     bool m_fieldsLoaded = false;
     bool m_autoConnect = false;
-    char m_hostBuffer[128] = "";
+    char m_hostBuffer[256] = "";
     int m_portValue = 0;
-    char m_fileServerBuffer[256] = "";
+    char m_fileServerBuffer[512] = "";
 
     PlayerEntry* FindPlayerEntry(uint32_t networkID) {
         for (auto& entry : m_players) {
@@ -107,6 +137,28 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                 return &entry;
         }
         return nullptr;
+    }
+
+    bool HasPendingInvite() const {
+        for (const auto& entry : m_players) {
+            if (entry.pendingInvitePartyID != 0)
+                return true;
+        }
+        return false;
+    }
+
+    std::string BuildWindowTitle() const {
+        std::string title = "Zelda Online";
+
+        if (m_connected) {
+            title += " (" + std::to_string((int)(m_players.size())) + ")";
+
+            if (HasPendingInvite())
+                title += " " ICON_FA_ENVELOPE;
+        }
+
+        title += "###zo_room";
+        return title;
     }
 
     int PartyMemberCount() const {
@@ -118,8 +170,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         return count;
     }
 
-    void DrawMenuBar(PlayerListActionEventText& textEvent, PlayerListActionEventToggle& toggleEvent,
-                     PlayerListActionEvent*& pending) {
+    void DrawMenuBar(PlayerListActionEventText& textEvent, PlayerListActionEvent*& pending) {
         if (!ImGui::BeginMenuBar())
             return;
 
@@ -136,18 +187,177 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
             ImGui::SameLine();
 
-            if (ImGui::Checkbox("Private Dungeons", &m_partyScenes)) {
-                toggleEvent.actionEvent.action = PlayerListAction::SetPartyScenes;
-                toggleEvent.enabled = m_partyScenes;
-                pending = &toggleEvent.actionEvent;
+            if (ImGui::Button(ICON_FA_COG "##zo_party_settings")) {
+                m_partySettingsOpen = !m_partySettingsOpen;
+
+                if (m_partySettingsOpen)
+                    m_partySettingsBackup = m_partySettings;
             }
 
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Create a separate dungeon instance for your party.\n"
-                                  "Only members of your party can enter the instance.");
+                ImGui::SetTooltip("Party settings");
         }
 
         ImGui::EndMenuBar();
+    }
+
+    void EmitPartySettingChanged() {
+        if (!m_onAction)
+            return;
+
+        PlayerListActionEvent actionEvent;
+        actionEvent.action = PlayerListAction::PartySettingChanged;
+        m_onAction(&actionEvent);
+    }
+
+    void DrawPartySettings() {
+        if (!m_partySettingsOpen)
+            return;
+
+        if (!m_hasParty) {
+            m_partySettingsOpen = false;
+            return;
+        }
+
+        bool accept = false;
+        bool open = true;
+
+        ImGui::SetNextWindowSize(ImVec2(320.0f, m_partyAdmin ? 400.0f : 470.0f), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(260.0f, m_partyAdmin ? 380.0f : 450.0f), ImVec2(FLT_MAX, FLT_MAX));
+
+        if (ImGui::Begin("Party Settings###zo_party_settings_window", &open,
+                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+            if (!m_partyAdmin) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 1.0f));
+                ImGui::TextWrapped(ICON_FA_LOCK " Only the party admin can change these settings.");
+                ImGui::PopStyleColor();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Checkbox("Private Dungeons", &m_partySettings.privateDungeons)) {
+                if (!m_partySettings.privateDungeons) {
+                    m_partySettings.extraEnemies = false;
+                    m_partySettings.healthMultiplier = false;
+                }
+            }
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Create a separate dungeon instance for your party.\n"
+                                  "Only members of your party can enter the instance.");
+
+            ImGui::Spacing();
+
+            if (!m_partySettings.privateDungeons)
+                ImGui::BeginDisabled();
+
+            const float rowHeight = ImGui::GetFrameHeightWithSpacing();
+            const float padY = ImGui::GetStyle().WindowPadding.y * 2.0f;
+            const float labelHeight = ImGui::GetTextLineHeightWithSpacing();
+            const float enemyHeight = (rowHeight * 2.0f) + padY;
+            const float healthHeight = (rowHeight * 3.0f) + padY;
+            const float modifierHeight =
+                (labelHeight * 2.0f) + enemyHeight + healthHeight + (ImGui::GetStyle().ItemSpacing.y * 2.0f) + padY;
+
+            ImGui::TextUnformatted("Dungeon Settings");
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Requires Private Dungeons.");
+
+            if (ImGui::BeginChild("##zo_party_modifiers", ImVec2(0.0f, modifierHeight), true)) {
+                ImGui::TextUnformatted("Extra Enemies");
+
+                if (ImGui::BeginChild("##zo_extra_enemies", ImVec2(0.0f, enemyHeight), true)) {
+                    ImGui::Checkbox("Enabled", &m_partySettings.extraEnemies);
+
+                    if (!m_partySettings.extraEnemies)
+                        ImGui::BeginDisabled();
+
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::SliderFloat("##zo_extra_enemy_weight", &m_partySettings.extraEnemyWeight, 0.0f, 5.0f,
+                                       "Weight %.1f", ImGuiSliderFlags_AlwaysClamp);
+
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                        ImGui::SetTooltip("Spawn weight for extra enemies.");
+
+                    if (!m_partySettings.extraEnemies)
+                        ImGui::EndDisabled();
+                }
+
+                ImGui::EndChild();
+
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Health Multiplier");
+
+                if (ImGui::BeginChild("##zo_health_multiplier", ImVec2(0.0f, healthHeight), true)) {
+                    ImGui::Checkbox("Enabled", &m_partySettings.healthMultiplier);
+
+                    if (!m_partySettings.healthMultiplier)
+                        ImGui::BeginDisabled();
+
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::SliderFloat("##zo_enemy_health_weight", &m_partySettings.enemyHealthWeight, 0.0f, 5.0f,
+                                       "Enemy %.1f", ImGuiSliderFlags_AlwaysClamp);
+
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                        ImGui::SetTooltip("Health weight for regular enemies.");
+
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    ImGui::SliderFloat("##zo_boss_health_weight", &m_partySettings.bossHealthWeight, 0.0f, 5.0f,
+                                       "Boss %.1f", ImGuiSliderFlags_AlwaysClamp);
+
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                        ImGui::SetTooltip("Health weight for bosses.");
+
+                    if (!m_partySettings.healthMultiplier)
+                        ImGui::EndDisabled();
+                }
+
+                ImGui::EndChild();
+            }
+
+            ImGui::EndChild();
+
+            if (!m_partySettings.privateDungeons)
+                ImGui::EndDisabled();
+
+            if (!m_partyAdmin)
+                ImGui::EndDisabled();
+
+            ImGui::Separator();
+
+            if (m_partyAdmin) {
+                if (ImGui::Button("OK", ImVec2(80.0f, 0.0f)))
+                    accept = true;
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Cancel", ImVec2(80.0f, 0.0f)))
+                    open = false;
+            } else {
+                if (ImGui::Button("Close", ImVec2(80.0f, 0.0f)))
+                    open = false;
+            }
+        }
+
+        ImGui::End();
+
+        if (accept) {
+            m_partySettingsOpen = false;
+            m_partySettingsBackup = m_partySettings;
+            EmitPartySettingChanged();
+            return;
+        }
+
+        if (!open) {
+            m_partySettings = m_partySettingsBackup;
+            m_partySettingsOpen = false;
+            return;
+        }
+
+        m_partySettingsOpen = open;
     }
 
     static std::string LocationLabel(const PlayerEntry& entry) {
@@ -187,6 +397,9 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
         if (entry.pendingInvitePartyID != 0)
             label = ICON_FA_ENVELOPE " " + label;
+
+        if (m_partyAdminID != 0 && entry.networkID == m_partyAdminID)
+            label = ICON_FA_STAR " " + label;
 
         ImGui::Selectable(label.c_str());
         ImGui::PopStyleColor();
@@ -295,6 +508,314 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         ImGui::PopID();
     }
 
+    void LoadChatSettings() {
+        if (m_chatSettingsLoaded)
+            return;
+
+        m_applySkinPitch = CVarGetInteger("gZeldaOnline.ApplySkinPitch", 1) != 0;
+        m_chatButtonShown = CVarGetInteger("gZeldaOnline.ChatButton", 0) != 0;
+        m_chatButtonX = CVarGetFloat("gZeldaOnline.ChatButtonX", -1.0f);
+        m_chatButtonY = CVarGetFloat("gZeldaOnline.ChatButtonY", -1.0f);
+        m_chatSettingsLoaded = true;
+    }
+
+    bool OnScreenKeyboardWanted() const {
+        if (CVarGetInteger("gZeldaOnline.ForceOnScreenKeyboard", 0) != 0)
+            return true;
+
+        return std::getenv("SteamDeck") != nullptr;
+    }
+
+    void ProbeOnScreenKeyboard() {
+        if (m_chatKeyboardProbed)
+            return;
+
+        m_chatKeyboardProbed = true;
+
+        const char* deck = std::getenv("SteamDeck");
+
+        printf("ZeldaOnline: SDL screen keyboard support=%d, text input active=%d, SteamDeck=%s, video=%s\n",
+               SDL_HasScreenKeyboardSupport() ? 1 : 0, SDL_IsTextInputActive() ? 1 : 0, deck ? deck : "(unset)",
+               SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(none)");
+    }
+
+    void SetOnScreenKeyboard(bool show) {
+        if (m_chatKeyboardShown == show)
+            return;
+
+        m_chatKeyboardShown = show;
+
+        ProbeOnScreenKeyboard();
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+
+        if (show) {
+            SDL_Rect rect;
+            rect.x = (int)(vp->Pos.x + 24.0f);
+            rect.y = (int)(vp->Pos.y + 24.0f);
+            rect.w = (int)(vp->Size.x - 48.0f);
+            rect.h = (int)(ImGui::GetFrameHeight());
+
+            SDL_SetTextInputRect(&rect);
+
+            if (!SDL_IsTextInputActive())
+                SDL_StartTextInput();
+        } else if (SDL_IsTextInputActive()) {
+            SDL_StopTextInput();
+        }
+
+        if (SDL_HasScreenKeyboardSupport() || !OnScreenKeyboardWanted())
+            return;
+
+#if defined(__linux__)
+        if (show) {
+            char command[256];
+            snprintf(command, sizeof(command),
+                     "xdg-open 'steam://open/keyboard?XPosition=0&YPosition=%d&Width=%d&Height=%d&Mode=0' "
+                     ">/dev/null 2>&1 &",
+                     (int)(vp->Size.y * 0.5f), (int)(vp->Size.x), (int)(vp->Size.y * 0.5f));
+            std::system(command);
+        } else {
+            std::system("xdg-open 'steam://close/keyboard' >/dev/null 2>&1 &");
+        }
+#endif
+    }
+
+    float CurrentSkinPitch() const {
+        if (!m_applySkinPitch)
+            return 1.0f;
+
+        const std::string currentKey = m_currentSkin.empty() ? std::string("link") : m_currentSkin;
+
+        for (const auto& skin : m_availableSkins) {
+            if (skin.referenceName == currentKey)
+                return skin.pitch;
+        }
+
+        return 1.0f;
+    }
+
+    void SaveApplySkinPitch() {
+        CVarSetInteger("gZeldaOnline.ApplySkinPitch", m_applySkinPitch ? 1 : 0);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+
+    void SaveChatButtonShown() {
+        CVarSetInteger("gZeldaOnline.ChatButton", m_chatButtonShown ? 1 : 0);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+
+    void SaveChatButtonPos(const ImVec2& pos) {
+        if (pos.x == m_chatButtonX && pos.y == m_chatButtonY)
+            return;
+
+        m_chatButtonX = pos.x;
+        m_chatButtonY = pos.y;
+        CVarSetFloat("gZeldaOnline.ChatButtonX", m_chatButtonX);
+        CVarSetFloat("gZeldaOnline.ChatButtonY", m_chatButtonY);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+
+    void DrawChatToggleButton() {
+        ImGui::SameLine();
+
+        if (m_chatButtonShown) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+
+        if (ImGui::Button(ICON_FA_COMMENT "##zo_chat_toggle")) {
+            m_chatButtonShown = !m_chatButtonShown;
+
+            if (!m_chatButtonShown) {
+                m_chatBoxOpen = false;
+                m_chatBoxFocus = false;
+            }
+
+            SaveChatButtonShown();
+        }
+
+        if (m_chatButtonShown)
+            ImGui::PopStyleColor(2);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(m_chatButtonShown ? "Hide chat button" : "Show chat button");
+    }
+
+    void HandleChatHotkey() {
+        if (!m_chatButtonShown)
+            return;
+
+        if (ImGui::GetIO().WantTextInput)
+            return;
+
+        if (!ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false))
+            return;
+
+        m_chatBoxOpen = !m_chatBoxOpen;
+
+        if (m_chatBoxOpen) {
+            m_chatBuffer[0] = '\0';
+            m_chatBoxFocus = true;
+        }
+    }
+
+    void DrawChatButton() {
+        if (!m_chatButtonShown) {
+            m_chatButtonPlaced = false;
+            return;
+        }
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+
+        if (!m_chatButtonPlaced) {
+            if (m_chatButtonX >= 0.0f && m_chatButtonY >= 0.0f)
+                ImGui::SetNextWindowPos(ImVec2(m_chatButtonX, m_chatButtonY), ImGuiCond_Always);
+
+            m_chatButtonPlaced = true;
+        }
+
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::SetNextWindowBgAlpha(0.35f);
+
+        const bool visible = ImGui::Begin("##zo_chat_button", nullptr, flags);
+
+        ImVec2 pos = ImGui::GetWindowPos();
+        const ImVec2 size = ImGui::GetWindowSize();
+
+        float maxX = vp->Pos.x + vp->Size.x - size.x;
+        float maxY = vp->Pos.y + vp->Size.y - size.y;
+
+        if (maxX < vp->Pos.x)
+            maxX = vp->Pos.x;
+        if (maxY < vp->Pos.y)
+            maxY = vp->Pos.y;
+
+        ImVec2 clamped = pos;
+
+        if (clamped.x > maxX)
+            clamped.x = maxX;
+        if (clamped.y > maxY)
+            clamped.y = maxY;
+        if (clamped.x < vp->Pos.x)
+            clamped.x = vp->Pos.x;
+        if (clamped.y < vp->Pos.y)
+            clamped.y = vp->Pos.y;
+
+        if (clamped.x != pos.x || clamped.y != pos.y) {
+            ImGui::SetWindowPos(clamped);
+            pos = clamped;
+        }
+
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            SaveChatButtonPos(pos);
+
+        if (visible) {
+            if (m_chatBoxOpen) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            }
+
+            if (ImGui::Button(ICON_FA_COMMENT, ImVec2(40.0f, 40.0f))) {
+                m_chatBoxOpen = !m_chatBoxOpen;
+
+                if (m_chatBoxOpen)
+                    m_chatBoxFocus = true;
+            }
+
+            if (m_chatBoxOpen)
+                ImGui::PopStyleColor(2);
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Chat '~' Key");
+        }
+
+        ImGui::End();
+    }
+
+    void DrawChatBox() {
+        SetOnScreenKeyboard(m_chatBoxOpen);
+
+        const float target = m_chatBoxOpen ? 1.0f : 0.0f;
+        const float step = ImGui::GetIO().DeltaTime * 8.0f;
+
+        if (m_chatBoxAnim < target) {
+            m_chatBoxAnim += step;
+
+            if (m_chatBoxAnim > target)
+                m_chatBoxAnim = target;
+        } else if (m_chatBoxAnim > target) {
+            m_chatBoxAnim -= step;
+
+            if (m_chatBoxAnim < target)
+                m_chatBoxAnim = target;
+        }
+
+        if (m_chatBoxAnim <= 0.0f)
+            return;
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+
+        const float margin = 24.0f;
+        const float maxWidth = vp->Size.x - (margin * 2.0f);
+        const float eased = m_chatBoxAnim * m_chatBoxAnim * (3.0f - (2.0f * m_chatBoxAnim));
+        const float width = maxWidth * eased;
+        const float height = ImGui::GetFrameHeight() + (ImGui::GetStyle().WindowPadding.y * 2.0f);
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav;
+
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + margin, vp->Pos.y + margin));
+        ImGui::SetNextWindowSize(ImVec2(width, height));
+        ImGui::SetNextWindowBgAlpha(0.65f);
+
+        if (m_chatBoxFocus)
+            ImGui::SetNextWindowFocus();
+
+        if (ImGui::Begin("##zo_chat_box", nullptr, flags)) {
+            ImGui::SetNextItemWidth(-FLT_MIN);
+
+            if (m_chatBoxFocus) {
+                ImGui::SetKeyboardFocusHere();
+                m_chatBoxFocus = false;
+            }
+
+            if (ImGui::InputTextWithHint("##zo_chat_input", "Say something...", m_chatBuffer, sizeof(m_chatBuffer),
+                                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                if (m_chatBuffer[0] != '\0') {
+                    PlayerListActionEventText chatEvent;
+                    chatEvent.actionEvent.action = PlayerListAction::Chat;
+                    chatEvent.text = m_chatBuffer;
+
+                    if (m_onAction)
+                        m_onAction(&chatEvent.actionEvent);
+                }
+
+                m_chatBuffer[0] = '\0';
+
+                if (OnScreenKeyboardWanted()) {
+                    m_chatBoxFocus = true;
+                } else {
+                    m_chatBoxOpen = false;
+                    m_chatBoxFocus = false;
+                }
+            }
+
+            if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                m_chatBuffer[0] = '\0';
+                m_chatBoxOpen = false;
+            }
+        }
+
+        ImGui::End();
+    }
+
   public:
     using GuiWindow::GuiWindow;
 
@@ -329,6 +850,10 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         if (!hasParty) {
             for (auto& entry : m_players)
                 entry.isInParty = false;
+
+            m_partyAdmin = false;
+            m_partyAdminID = 0;
+            m_partySettingsOpen = false;
         }
     }
 
@@ -336,12 +861,41 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         return m_hasParty;
     }
 
-    void SetPartyScenes(bool enabled) {
-        m_partyScenes = enabled;
+    int GetPartySize() const {
+        if (!m_hasParty)
+            return 1;
+
+        int size = 1;
+
+        for (const auto& entry : m_players) {
+            if (entry.isInParty)
+                size++;
+        }
+
+        return size;
     }
 
-    bool PartyScenes() const {
-        return m_partyScenes;
+    PartySettings& GetPartySettings() {
+        return m_partySettings;
+    }
+
+    void SetPartyAdminID(uint32_t networkID) {
+        m_partyAdminID = networkID;
+    }
+
+    uint32_t PartyAdminID() const {
+        return m_partyAdminID;
+    }
+
+    void SetPartyAdmin(bool admin) {
+        m_partyAdmin = admin;
+
+        if (!admin)
+            m_partySettingsOpen = false;
+    }
+
+    bool PartyAdmin() const {
+        return m_partyAdmin;
     }
 
     void AddPlayer(const PlayerEntry& player) {
@@ -426,6 +980,9 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
             m_players.clear();
             m_hasParty = false;
             m_fieldsLoaded = false;
+            m_chatBoxOpen = false;
+            m_chatBoxFocus = false;
+            SetOnScreenKeyboard(false);
         } else {
             SetDisplayName("");
         }
@@ -455,7 +1012,10 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     void Reset() {
         m_players.clear();
         m_hasParty = false;
-        m_partyScenes = false;
+        m_partyAdmin = false;
+        m_partyAdminID = 0;
+        m_partySettingsOpen = false;
+        m_partySettings = PartySettings();
         m_connected = false;
         m_connecting = false;
         m_statusText.clear();
@@ -555,8 +1115,8 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     void DrawElement() override {
         PlayerListActionEventInvite inviteEvent;
         PlayerListActionEventText textEvent;
-        PlayerListActionEventToggle toggleEvent;
         PlayerListActionEventConnect connectEvent;
+        PlayerListActionEventMultiVar multiVarEvent;
         PlayerListActionEvent actionEvent;
         PlayerListActionEvent* pending = nullptr;
 
@@ -577,7 +1137,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         }
 
         {
-            DrawMenuBar(textEvent, toggleEvent, pending);
+            DrawMenuBar(textEvent, pending);
 
             float footerHeight = (ImGui::GetFrameHeightWithSpacing() * 3.0f) + 12.0f;
 
@@ -585,7 +1145,10 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                 footerHeight += ImGui::GetTextLineHeightWithSpacing();
 
             if (m_hasParty) {
-                ImGui::Text(ICON_FA_USERS " Party: %d others", PartyMemberCount());
+                if (m_partyAdmin)
+                    ImGui::Text(ICON_FA_STAR " " ICON_FA_USERS " Party: %d others", PartyMemberCount());
+                else
+                    ImGui::Text(ICON_FA_USERS " Party: %d others", PartyMemberCount());
                 ImGui::Separator();
 
                 for (const auto& entry : m_players) {
@@ -616,7 +1179,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
             ImGui::TextUnformatted("Skin");
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemWidth(-(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x));
 
             const std::string currentKey = m_currentSkin.empty() ? std::string("link") : m_currentSkin;
             const char* preview = currentKey.c_str();
@@ -637,9 +1200,11 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                     ImGui::PushID(skin.referenceName.c_str());
 
                     if (ImGui::Selectable(skin.displayName.c_str(), selected)) {
-                        textEvent.actionEvent.action = PlayerListAction::ChangeSkin;
-                        textEvent.text = skin.referenceName;
-                        pending = &textEvent.actionEvent;
+                        multiVarEvent.actionEvent.action = PlayerListAction::ChangeSkin;
+                        multiVarEvent.text = skin.referenceName;
+                        multiVarEvent.intValue = m_applySkinPitch ? 1 : 0;
+                        multiVarEvent.floatValue = m_applySkinPitch ? skin.pitch : 1.0f;
+                        pending = &multiVarEvent.actionEvent;
                     }
 
                     if (ImGui::IsItemHovered())
@@ -653,6 +1218,32 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
                 ImGui::EndCombo();
             }
+
+            ImGui::SameLine();
+
+            if (m_applySkinPitch) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            }
+
+            if (ImGui::Button(m_applySkinPitch ? ICON_FA_VOLUME_UP "##zo_skin_pitch"
+                                               : ICON_FA_VOLUME_OFF "##zo_skin_pitch",
+                              ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
+                m_applySkinPitch = !m_applySkinPitch;
+                SaveApplySkinPitch();
+
+                multiVarEvent.actionEvent.action = PlayerListAction::ToggleSkinPitch;
+                multiVarEvent.text = m_currentSkin;
+                multiVarEvent.intValue = m_applySkinPitch ? 1 : 0;
+                multiVarEvent.floatValue = CurrentSkinPitch();
+                pending = &multiVarEvent.actionEvent;
+            }
+
+            if (m_applySkinPitch)
+                ImGui::PopStyleColor(2);
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(m_applySkinPitch ? "Skin voice pitch on" : "Skin voice pitch off");
 
             ImGui::TextUnformatted("Name");
             ImGui::SameLine();
@@ -684,10 +1275,12 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                 pending = &actionEvent;
             }
 
-            ImGui::PopStyleVar();
-
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Unstuck me");
+
+            DrawChatToggleButton();
+
+            ImGui::PopStyleVar();
 
             if (!m_statusText.empty()) {
                 ImGui::SameLine();
@@ -702,6 +1295,8 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     }
 
     void Draw() override {
+        LoadChatSettings();
+
         if (!IsVisible()) {
             return;
         }
@@ -730,7 +1325,9 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
             m_recenterNextFrame = false;
         }
 
-        if (ImGui::Begin("Zelda Online", &mIsVisible,
+        const std::string title = BuildWindowTitle();
+
+        if (ImGui::Begin(title.c_str(), &mIsVisible,
                          ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_MenuBar)) {
             DrawElement();
         }
@@ -739,6 +1336,13 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(1);
+
+        if (m_connected) {
+            DrawPartySettings();
+            HandleChatHotkey();
+            DrawChatButton();
+            DrawChatBox();
+        }
     }
 
     void UpdateElement() override {};

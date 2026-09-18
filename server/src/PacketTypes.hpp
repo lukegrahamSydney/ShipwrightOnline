@@ -42,6 +42,10 @@ namespace ZeldaOnline {
         CLIENT_PACKET_KEEP_ALIVE = 32,
         CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART = 33,
         CLIENT_PACKET_CHEST_OPENED = 34,
+
+        CLIENT_PACKET_CHAT_MESSAGE = 35,
+        CLIENT_PACKET_UPDATE_PARTY_SETTINGS = 36,
+
     };
 
     enum ServerPackets {
@@ -81,6 +85,9 @@ namespace ZeldaOnline {
         SERVER_PACKET_ACTOR_STATIC_SPAWN = 30,
         SERVER_PACKET_POPULATE_SKINS = 31,
         SERVER_PACKET_CHEST_OPENED = 32,
+
+        SERVER_PACKET_CHAT_MESSAGE = 33,
+        SERVER_PACKET_UPDATE_PARTY_SETTINGS = 34,
     };
 
     static const int PLAYER_PUPPET_ROOM = -1;

@@ -43,6 +43,14 @@ class ShellbladeController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
     
     void OnActorInit() override {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;

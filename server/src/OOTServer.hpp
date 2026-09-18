@@ -23,6 +23,13 @@
 
 namespace ZeldaOnline
 {
+	struct PlayerSkin
+	{
+		std::string displayName;
+		std::string referenceName;
+		float pitch = 1.0f;
+	};
+
 	class OOTServer
 	{
 	public:
@@ -177,7 +184,7 @@ namespace ZeldaOnline
 		std::unordered_map<uint64_t, std::unique_ptr<Scene>> m_scenes;
 
 		ActorRegistry m_actors;
-		std::vector<std::pair<std::string, std::string>> m_skins;
+		std::vector<PlayerSkin> m_skins;
 	};
 }
 

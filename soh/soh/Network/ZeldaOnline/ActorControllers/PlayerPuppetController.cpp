@@ -465,6 +465,14 @@ void PlayerPuppetController::UpdatePuppet(PlayState* play) {
     m_originalUpdate(m_actor, play);
 
     UpdateSwordHitbox(play);
+
+    if (m_chat.m_visibleTimer > 0)
+    {
+        if (--m_chat.m_visibleTimer == 0)
+        {
+            NameTag_RemoveAllByActorTag(m_actor, "chat");
+        }
+    }
 }
 
 void PlayerPuppetController::KillHorse() {
@@ -857,14 +865,15 @@ void PlayerPuppetController::OnPropertiesApplied(u64 changed) {
 
     if (changed & (1ull << PPROP_NICKNAME)) {
         NameTagOptions options{};
+        options.tag = "name";
         options.textColor = m_paused ? Color_RGBA8{ 0, 128, 255, 255 } : Color_RGBA8{ 255, 255, 255, 255 };
-        NameTag_RemoveAllForActor(m_actor);
+        NameTag_RemoveAllByActorTag(m_actor, "name");
         NameTag_RegisterForActorWithOptions(m_actor, m_nickName.c_str(), options);
     }
 
     if (changed & (1ull << PPROP_PAUSED)) {
         Color_RGBA8 colour = m_paused ? Color_RGBA8{ 0, 128, 255, 255 } : Color_RGBA8{ 255, 255, 255, 255 };
-        NameTag_ChangeActorTextColour(m_actor, &colour);
+        NameTag_ChangeActorTextColour(m_actor, &colour, "name");
     }
     if (0) {
         Player* player = (Player*)m_actor;
@@ -1015,6 +1024,19 @@ void PlayerPuppetController::DrawFishingLureAndLine(PlayState* play) {
     Graph_CloseDisps(dispRefs, play->state.gfxCtx, __FILE__, __LINE__);
 }
 
+void PlayerPuppetController::SetChatText(const std::string& text, const Color_RGBA8& colour) {
+    m_chat.m_text = text;
+    m_chat.m_visibleTimer = 20 * 8;
+
+    NameTagOptions options{};
+    options.tag = "chat";
+    options.textColor = colour;
+    options.yOffset = -10;
+    options.scale = 0.5f;
+    NameTag_RemoveAllByActorTag(m_actor, "chat");
+    NameTag_RegisterForActorWithOptions(m_actor, text.c_str(), options);
+}
+
 void PlayerPuppetController::PuppetInit(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     auto* self = static_cast<PlayerPuppetController*>(actor->zoController);
@@ -1055,7 +1077,6 @@ void PlayerPuppetController::PuppetInit(Actor* actor, PlayState* play) {
 }
 
 
-
 void PlayerPuppetController::PuppetUpdate(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     auto* self = static_cast<PlayerPuppetController*>(actor->zoController);
@@ -1065,8 +1086,7 @@ void PlayerPuppetController::PuppetUpdate(Actor* actor, PlayState* play) {
 
     auto sceneNum = gPlayState->sceneNum;
 
-    if (IS_CUTSCENE_LAYER)
-    {
+    if (IS_CUTSCENE_LAYER) {
         player->actor.draw = nullptr;
     } else {
         player->actor.draw = PuppetDraw;
@@ -1085,7 +1105,6 @@ void PlayerPuppetController::PuppetUpdate(Actor* actor, PlayState* play) {
         player->csAction = self->m_csAction;
         player->itemAction = self->m_itemAction;
         player->heldItemAction = self->m_heldItemAction;
-        // player->heldItemAction = self->m_heldItemAction;
 
         player->unk_85C = self->m_unk_85C;
         player->invincibilityTimer = self->m_invincibilityTimer;
@@ -1140,8 +1159,8 @@ void PlayerPuppetController::PuppetUpdate(Actor* actor, PlayState* play) {
             player->actor.world.pos = syncedPos;
 
         if (!(player->stateFlags2 & PLAYER_STATE2_FROZEN)) {
-            if (!(player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_HANGING_OFF_LEDGE |
-                                         PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_ON_HORSE))) {
+            if (!self->m_paused && !(player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                                                            PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_ON_HORSE))) {
                 CollisionCheck_SetOC(play, &play->colChkCtx, &player->cylinder.base);
             }
 

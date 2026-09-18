@@ -65,6 +65,13 @@ class DekuBabaController : public AbstractActorController {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
     }
 
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health = (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
 
     u8 CurrentActionIndex() const {
         size_t n;

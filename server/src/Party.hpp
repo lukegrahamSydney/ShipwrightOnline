@@ -107,8 +107,23 @@ namespace ZeldaOnline
 			}
 		}
 
+		void SetSettings(const std::string& settings);
+
+		const std::string& Settings() const {
+			return m_settings;
+		}
 		void SendToAll(const ByteStream& payload, Player* except = nullptr);
 		void SendToScene(Scene* scene, const ByteStream& payload, Player* except = nullptr);
+
+		bool PrivateDungeons() const {
+			return m_privateDungeons;
+		}
+
+		Player* GetAdmin() {
+			if (m_members.size())
+				return m_members[0];
+			return nullptr;
+		}
 
 	private:
 		explicit Party(uint32_t id) : m_id(id)
@@ -118,6 +133,8 @@ namespace ZeldaOnline
 		uint32_t m_id;
 		std::vector<Player*> m_members;
 		std::unordered_set<uint64_t> m_invitedPlayers;
+		std::string m_settings;
+		bool m_privateDungeons = false;
 
 		inline static uint32_t s_nextID = 1;
 		inline static std::unordered_map<uint32_t, std::weak_ptr<Party>> s_parties;

@@ -5,6 +5,8 @@
 extern "C" {
 #include "z64player.h"
 #include "src/overlays/actors/ovl_En_Torch2/z_en_torch2.h"
+#include "src/overlays/actors/ovl_En_Zf/z_en_zf.h"
+
 #include <macros.h>
 
 extern f32* gEnTorch2StickTilt;
@@ -53,6 +55,11 @@ class DarkLinkController : public AbstractActorController {
         PROP_ANIM,
         PROP_JOINTS,
     };
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
 
     void BuildCustomProperties(ByteStream& out) override {
         Player* dl = Typed();

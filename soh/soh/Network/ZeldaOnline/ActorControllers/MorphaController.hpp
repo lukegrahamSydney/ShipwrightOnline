@@ -116,6 +116,11 @@ class MorphaController : public AbstractBossController {
             Actor_Kill(m_actor);
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
     u8 CurrentActionIndex() const {
         size_t count;
         const MoActionFunc* table = ActionTable(&count);

@@ -21,12 +21,16 @@
 #include <cstring>
 #include <cstdio>
 #include "HorsePuppet.hpp"
+#include "PacketStrings.hpp"
 #include "assets/objects/gameplay_keep/gameplay_keep.h"
 #include <soh/Extractor/Extract.h>
 
 #include <soh/ActorDB.h>
 #include "soh/Enhancements/PlayerSkin/PlayerSkin.h"
 #include <ship/utils/StringHelper.h>
+
+#include "ZeldaOnlineRoomWindow.hpp"
+
 #ifdef _WIN32
 static void DbgPrintf(const char* fmt, ...) {
     char buf[1024];
@@ -232,7 +236,7 @@ static void ReloadSceneInPlace(PlayState* play) {
 
 
 // Must be 10 characters
-static const std::string CURRENT_VERSION = "BETA000001";
+static const std::string CURRENT_VERSION = "BETA000002";
 ZeldaOnlineClient::ZeldaOnlineClient() {
     m_blockedParentSpawners.insert(ACTOR_BG_SPOT01_OBJECTS2);
 }
@@ -289,8 +293,12 @@ void ZeldaOnlineClient::Enable() {
                 m_nickName = textAction->text;
 
                 if (gPlayState) {
-                    NameTag_RemoveAllForActor(&GET_PLAYER(gPlayState)->actor);
-                    NameTag_RegisterForActor(&GET_PLAYER(gPlayState)->actor, m_nickName.c_str());
+                    NameTag_RemoveAllByActorTag(&GET_PLAYER(gPlayState)->actor, "name");
+                    NameTagOptions options{};
+                    options.tag = "name";
+                    options.textColor =  Color_RGBA8{ 255, 255, 255, 255 };
+
+                    NameTag_RegisterForActorWithOptions(&GET_PLAYER(gPlayState)->actor, m_nickName.c_str(), options);
                     m_removeNametagTimer = 20 * 5;
                 }
                 ZeldaOnlineRoomWindow::Instance->SetDisplayName("");
@@ -299,16 +307,17 @@ void ZeldaOnlineClient::Enable() {
                 break;
             }
 
-            case PlayerListAction::SetPartyScenes: {
+            /* case PlayerListAction::SetPartyScenes: {
                 auto* toggle = reinterpret_cast<const PlayerListActionEventToggle*>(e);
                 WritePacket(newPacket(CLIENT_PACKET_PARTY_ENABLE_SCENES) << PackedUInt1(toggle->enabled ? 1 : 0));
 
                 if (gPlayState && IsPartyScene(gPlayState->sceneNum))
                     ReloadSceneInPlace(gPlayState);
                 break;
-            }
+            }*/
+
             case PlayerListAction::CreateParty: {
-                WritePacket(newPacket(CLIENT_PACKET_PARTY_CREATE));
+                WritePacket(newPacket(CLIENT_PACKET_PARTY_CREATE) << BuildPartySettingsJSON(m_partySettings));
                 break;
             }
 
@@ -350,9 +359,17 @@ void ZeldaOnlineClient::Enable() {
                 break;
             }
 
+            case PlayerListAction::ToggleSkinPitch: {
+                auto* multiVar = reinterpret_cast<const PlayerListActionEventMultiVar*>(e);
+
+                if (multiVar->intValue)
+                    CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), multiVar->floatValue);
+                break;
+            
+            }
             case PlayerListAction::ChangeSkin: {
-                auto* textAction = reinterpret_cast<const PlayerListActionEventText*>(e);
-                m_skinRef = textAction->text;
+                auto* multiVar = reinterpret_cast<const PlayerListActionEventMultiVar*>(e);
+                m_skinRef = multiVar->text;
                 std::vector<std::string> archives;
                 SplitSkinRef(m_skinRef, m_skinName, archives);
 
@@ -364,10 +381,15 @@ void ZeldaOnlineClient::Enable() {
                         Player_ReapplySkeleton(player, gPlayState);
                         ZeldaOnlineRoomWindow::Instance->SetCurrentSkin("link");
 
+                        if (multiVar->intValue)
+                            CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), 1.0f);
                         break;
                     }
 
                     player->skin = PlayerSkin_Get(m_skinName.c_str());
+
+                    if (multiVar->intValue)
+                        CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), multiVar->floatValue);
                 }
 
                 auto missingArchives = MissingArchives(archives);
@@ -382,6 +404,30 @@ void ZeldaOnlineClient::Enable() {
                 break;
             }
 
+            case PlayerListAction::Chat: {
+                auto* messageEvent = reinterpret_cast<const PlayerListActionEventText*>(e);
+
+                if (!isConnected)
+                    break;
+
+                WritePacket(newPacket(CLIENT_PACKET_CHAT_MESSAGE) << messageEvent->text);
+
+                m_chatVisibleTimer = 8 * 20;
+                
+                if (gPlayState) {
+                    auto playerActor = &GET_PLAYER(gPlayState)->actor;
+                    NameTagOptions options{};
+                    options.tag = "chat";
+                    options.textColor = { 255, 255, 0, 255 };
+                    options.yOffset = -10;
+                    options.scale = 0.5f;
+                    NameTag_RemoveAllByActorTag(playerActor, "chat");
+                    NameTag_RegisterForActorWithOptions(playerActor, messageEvent->text.c_str(), options);
+                }
+
+                break;
+            }
+
             case PlayerListAction::UnstuckMe: {
                 if (gPlayState == nullptr)
                     break;
@@ -392,6 +438,13 @@ void ZeldaOnlineClient::Enable() {
                 gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
             } break;
            
+            case PlayerListAction::PartySettingChanged: {
+                PartySettings& partySettings = ZeldaOnlineRoomWindow::Instance->GetPartySettings();
+
+                WritePacket(newPacket(CLIENT_PACKET_UPDATE_PARTY_SETTINGS) << BuildPartySettingsJSON(partySettings));
+                SetPartySettings(partySettings);
+            } break;
+
             default:
                 break;
         }
@@ -416,6 +469,57 @@ void ZeldaOnlineClient::Enable() {
     {
         ZeldaOnlineRoomWindow::Instance->BeginAutoConnect();
     }
+}
+
+std::string ZeldaOnlineClient::BuildPartySettingsJSON(const PartySettings& partySettings) {
+    nlohmann::json settings;
+    settings["privateDungeons"] = partySettings.privateDungeons;
+    settings["extraEnemies"] = partySettings.extraEnemies;
+    settings["extraEnemyWeight"] = partySettings.extraEnemyWeight;
+    settings["healthMultiplier"] = partySettings.healthMultiplier;
+    settings["enemyHealthWeight"] = partySettings.enemyHealthWeight;
+    settings["bossHealthWeight"] = partySettings.bossHealthWeight;
+
+    return settings.dump();
+}
+
+bool ZeldaOnlineClient::ParsePartySettingsJSON(const std::string& partySettings, PartySettings& out) {
+    auto settings = nlohmann::json::parse(partySettings);
+
+    if (!settings.is_object())
+        return false;
+
+    out.privateDungeons = settings.value("privateDungeons", false);
+    out.extraEnemies = settings.value("extraEnemies", false);
+    out.extraEnemyWeight = settings.value("extraEnemyWeight", 1.0f);
+    out.healthMultiplier = settings.value("healthMultiplier", false);
+    out.enemyHealthWeight = settings.value("enemyHealthWeight", 1.0f);
+    out.bossHealthWeight = settings.value("bossHealthWeight", 1.0f);
+
+    if (out.extraEnemyWeight < 0.0f)
+        out.extraEnemyWeight = 0.0f;
+    if (out.extraEnemyWeight > 5.0f)
+        out.extraEnemyWeight = 5.0f;
+
+    if (out.enemyHealthWeight < 0.0f)
+        out.enemyHealthWeight = 0.0f;
+    if (out.enemyHealthWeight > 5.0f)
+        out.enemyHealthWeight = 5.0f;
+
+    if (out.bossHealthWeight < 0.0f)
+        out.bossHealthWeight = 0.0f;
+    if (out.bossHealthWeight > 5.0f)
+        out.bossHealthWeight = 5.0f;
+    return true;
+
+}
+
+void ZeldaOnlineClient::SetPartySettings(const PartySettings& settings) {
+    if (m_partySettings.privateDungeons != settings.privateDungeons) {
+        if (gPlayState && IsPartyScene(gPlayState->sceneNum))
+            ReloadSceneInPlace(gPlayState);
+    }
+    m_partySettings = settings;
 }
 
 void ZeldaOnlineClient::OnConnected() {
@@ -1162,6 +1266,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
                 if (window != nullptr)
                     window->AddPlayer(entry);
+
             }
         } break;
 
@@ -1173,6 +1278,8 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
             if (ZeldaOnlineRoomWindow::Instance != nullptr)
                 ZeldaOnlineRoomWindow::Instance->RemovePlayer(networkID);
+
+            
         } break;
 
         case SERVER_PACKET_PLAYER_LIST_UPDATE: {
@@ -1193,7 +1300,11 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             uint32_t previousPartyID = m_partyID;
 
             m_partyID = (uint32_t)(packet.Read<PackedUInt4>().value());
-            bool isCreator = packet.Read<PackedUInt1>().value() != 0;
+            auto partyAdmin = packet.Read<PackedUInt2>().value();
+
+            std::string partySettingsJSON = packet.ReadString(packet.BytesLeft());
+
+            bool isAdmin = partyAdmin == m_myNetworkID;
 
             if (m_partyID == previousPartyID)
                 break;
@@ -1202,12 +1313,26 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 ZeldaOnlineRoomWindow::Instance->SetHasParty(m_partyID != 0);
                 ZeldaOnlineRoomWindow::Instance->ClearPendingInvites();
 
-                if (m_partyID == 0 || isCreator)
+                if (m_partyID == 0 || isAdmin)
                     ZeldaOnlineRoomWindow::Instance->ClearPartyFlags();
-            }
+
+                ZeldaOnlineRoomWindow::Instance->SetPartyAdmin(isAdmin);
+                ZeldaOnlineRoomWindow::Instance->SetPartyAdminID(partyAdmin);
+                m_partySize = ZeldaOnlineRoomWindow::Instance->GetPartySize();
+
+                if (partySettingsJSON.length() > 0) {
+                    PartySettings& partySettings = ZeldaOnlineRoomWindow::Instance->GetPartySettings();
+
+                    if (ParsePartySettingsJSON(partySettingsJSON, partySettings))
+                        SetPartySettings(partySettings);
+                }
+            } else
+                m_partySize = 1;
 
             if (gPlayState && (IsDungeonScene(gPlayState->sceneNum) || IsBossScene(gPlayState->sceneNum)))
                 ReloadSceneInPlace(gPlayState);
+
+            
         } break;
 
         case SERVER_PACKET_PARTY_INVITE: {
@@ -1229,9 +1354,12 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 break;
 
             uint32_t memberNetworkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+            
 
             if (ZeldaOnlineRoomWindow::Instance != nullptr)
                 ZeldaOnlineRoomWindow::Instance->SetInParty(memberNetworkID, true);
+
+            m_partySize = ZeldaOnlineRoomWindow::Instance->GetPartySize();
         } break;
 
         case SERVER_PACKET_PARTY_MEMBER_REMOVE: {
@@ -1239,9 +1367,18 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 break;
 
             uint32_t memberNetworkID = (uint32_t)(packet.Read<PackedUInt2>().value());
+            auto partyAdmin = packet.Read<PackedUInt2>().value(); 
+            bool isAdmin = partyAdmin == m_myNetworkID;
 
-            if (ZeldaOnlineRoomWindow::Instance != nullptr)
+            if (ZeldaOnlineRoomWindow::Instance != nullptr) {
                 ZeldaOnlineRoomWindow::Instance->SetInParty(memberNetworkID, false);
+                ZeldaOnlineRoomWindow::Instance->SetPartyAdmin(isAdmin);
+                ZeldaOnlineRoomWindow::Instance->SetPartyAdminID(partyAdmin);
+                m_partySize = ZeldaOnlineRoomWindow::Instance->GetPartySize();
+            } else
+                m_partySize = 1;
+
+            
         } break;
 
 
@@ -1274,6 +1411,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = roomIndex;
             gSaveContext.respawn[RESPAWN_MODE_DOWN].pos = Vec3f_{x, y, z};
             gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = player->actor.shape.rot.y;
+            gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0DFF;
             /*
             if (gPlayState->roomCtx.curRoom.behaviorType2 < 4) {
                 gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0DFF;
@@ -1353,7 +1491,8 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 unsigned int referenceLen = packet.Read<PackedUInt2>().value();
                 std::string reference = packet.ReadString(referenceLen);
 
-                skins.push_back(SkinOption{ displayName, reference });
+                float pitch = packet.Read<PackedFloat4>().value();
+                skins.push_back(SkinOption{ displayName, reference, pitch });
             }
 
             if (ZeldaOnlineRoomWindow::Instance != nullptr)
@@ -1449,6 +1588,44 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 }
             }
         } break;
+
+
+        case SERVER_PACKET_CHAT_MESSAGE: {
+            u16 fromNetworkID = (u16)(packet.Read<PackedUInt2>().value());
+            std::string text = packet.ReadString(packet.BytesLeft());
+
+            if (text.empty())
+                break;
+
+            AbstractActorController* ctl = GetNetworkController(fromNetworkID);
+            if (ctl == nullptr || !ctl->IsPlayer())
+                break;
+
+            static_cast<PlayerPuppetController*>(ctl)->SetChatText(text, { 255, 255, 0, 255 });
+
+            break;
+        }
+
+        case SERVER_PACKET_UPDATE_PARTY_SETTINGS: {
+            std::string jsonSettings = packet.ReadString(packet.BytesLeft());
+
+            if (jsonSettings.empty())
+                break;
+
+            if (ZeldaOnlineRoomWindow::Instance == nullptr)
+                break;
+
+            try {
+
+
+                PartySettings& partySettings = ZeldaOnlineRoomWindow::Instance->GetPartySettings();
+
+                if (ParsePartySettingsJSON(jsonSettings, partySettings))
+                    SetPartySettings(partySettings);
+
+            } catch (const std::exception& e) { printf("ZeldaOnline: bad party settings (%s)\n", e.what()); }
+        } break;
+
         default:
             SPDLOG_DEBUG("[ZeldaOnline] unhandled server packet id {}", serverPacketID);
             break;
@@ -1746,9 +1923,16 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
 
 
     COND_HOOK(OnFlagSet, enabled, [&](s16 flagType, s16 flag) {
+        if (gPlayState == NULL)
+            return;
+
         if (flagType == FLAG_INF_TABLE || flagType == FLAG_EVENT_CHECK_INF) {
-            printf("SENDING FLAG: %i:%i\n", flagType, int(flag));
+            auto sceneKey =
+                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
+
             ByteStream packet = newPacket(CLIENT_PACKET_SCENE_FLAG);
+            packet << PackedUInt4(sceneKey);
+            packet << PackedInt1((gPlayState->roomCtx.curRoom.num));
             packet << PackedUInt1((u8)(flagType));
             packet << PackedUInt2(flag);
             packet << PackedUInt1(1u);
@@ -2097,7 +2281,13 @@ void ZeldaOnlineClient::OnGameFrameUpdate() {
     {
         if (--m_removeNametagTimer == 0)
         {
-            NameTag_RemoveAllForActor(&GET_PLAYER(gPlayState)->actor);
+            NameTag_RemoveAllByActorTag(&GET_PLAYER(gPlayState)->actor, "name");
+        }
+    }
+
+    if (m_chatVisibleTimer > 0) {
+        if (--m_chatVisibleTimer == 0) {
+            NameTag_RemoveAllByActorTag(&GET_PLAYER(gPlayState)->actor, "chat");
         }
     }
 
@@ -2358,7 +2548,7 @@ static bool IsClusterDedupActor(s16 actorId) {
 
 
 Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
-                                     s16 params) {
+                                     s16 params, bool neighbourSpawn) {
     if (gPlayState == nullptr)
         return nullptr;
 
@@ -2401,7 +2591,6 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
 
     if (currentExecutingController != nullptr && currentExecutingController->GetActor()->init != nullptr &&
         !currentExecutingController->IsCreator()) {
-
         //Init calls are called by both leaders and puppets
         //If we are inside "init", only the actors "creator" is allowed to spawn
         return nullptr;
@@ -2425,6 +2614,11 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
     //No controller means the actor runs straight through its normal init process ASAP. A controller will mean it waits until network ID arrives
     if (controller) {
         controller->SetCreator(true);
+
+        //This actor is spawned as part of a neighbour spawn
+        //Do not allow this actor to also spawn neighbours
+        if (neighbourSpawn)
+            controller->DisableNeighbourSpawn();
     }
     DbgPrintf("[ZeldaOnline] networked spawn: actor {:#06x}", actorId);
 
@@ -2659,6 +2853,65 @@ void ZeldaOnlineClient::DetachAndKill(AbstractActorController* controller) {
     }
 }
 
+int ZeldaOnlineClient::RollNeighbourCount(f32 weight) const {
+    if (m_partyID == 0 || !m_partySettings.privateDungeons || !m_partySettings.extraEnemies)
+        return 0;
+
+    if (!IsPartyScene(gPlayState->sceneNum))
+        return 0;
+
+    if (weight <= 0.0f || m_partySettings.extraEnemyWeight <= 0.0f)
+        return 0;
+
+    f32 chance = m_partySize * m_neighbourChancePerPlayer * weight * m_partySettings.extraEnemyWeight;
+
+    if (chance <= 0.0f)
+        return 0;
+
+    if (chance >= 1.0f)
+        return m_maxNeighbours;
+
+    f32 roll = Rand_ZeroOne();
+
+    if (roll <= 0.0f)
+        return m_maxNeighbours;
+
+    int count = (int)(std::log(roll) / std::log(chance));
+
+    return count > m_maxNeighbours ? m_maxNeighbours : count;
+}
+float ZeldaOnlineClient::RollHealthMultiplier(f32 weight, f32 settingWeight) const {
+    if (m_partyID == 0 || !m_partySettings.privateDungeons || !m_partySettings.healthMultiplier)
+        return 1.0f;
+
+    if (!IsPartyScene(gPlayState->sceneNum))
+        return 1.0f;
+
+    if (weight <= 0.0f || settingWeight <= 0.0f)
+        return 1.0f;
+
+    if (m_partySize < 2)
+        return 1.0f;
+
+    f32 multiplier = 1.0f + ((m_partySize - 1) * m_healthWeightPerPlayer * weight * settingWeight);
+
+    if (multiplier < 1.0f)
+        multiplier = 1.0f;
+
+    if (multiplier > 3.0f)
+        multiplier = 3.0f;
+
+    return multiplier;
+}
+
+float ZeldaOnlineClient::RollEnemyHealthMultiplier(f32 weight) const {
+    return RollHealthMultiplier(weight, m_partySettings.enemyHealthWeight);
+}
+
+float ZeldaOnlineClient::RollBossHealthMultiplier(f32 weight) const {
+    return RollHealthMultiplier(weight, m_partySettings.bossHealthWeight);
+}
+
 std::vector<std::string> MissingArchives(const std::vector<std::string>& archiveNames) {
     std::unordered_set<std::string> loaded;
 
@@ -2695,10 +2948,6 @@ std::vector<std::string> MissingArchives(const std::vector<std::string>& archive
 
 extern "C" Actor* ZeldaOnlineClient_SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, s16 rotX, s16 rotY, s16 rotZ,
                                                s16 params) {
-    if (actorId == ACTOR_BOSS_GANON || actorId == ACTOR_BOSS_GANON2)
-    {
-        printf("break\n");
-    }
     auto instance = ZeldaOnline::ZeldaOnlineClient::Instance;
 
     if (gMapLoading)
@@ -2709,9 +2958,7 @@ extern "C" Actor* ZeldaOnlineClient_SpawnActor(s16 actorId, f32 posX, f32 posY, 
 
 extern "C" Actor* ZeldaOnlineClient_SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX, f32 posY, f32 posZ,
                                                       s16 rotX, s16 rotY, s16 rotZ, s16 params) {
-    if (actorId == ACTOR_BOSS_GANON || actorId == ACTOR_BOSS_GANON2) {
-        printf("break\n");
-    }
+
     auto instance = ZeldaOnline::ZeldaOnlineClient::Instance;
     return instance->SpawnActorAsChild(parent, actorId, posX, posY, posZ, rotX, rotY, rotZ, params);
 }

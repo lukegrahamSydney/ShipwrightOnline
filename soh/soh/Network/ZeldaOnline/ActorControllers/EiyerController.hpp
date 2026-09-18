@@ -98,6 +98,14 @@ class EiyerController : public AbstractActorController {
         }
     }
 
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
     u8 CurrentAnimIndex() const {
         const char* cur = (const char*)Typed()->skelanime.animation;
         if (cur == nullptr)

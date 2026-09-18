@@ -52,6 +52,12 @@ class StalchildController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
+
     u8 CurrentActionIndex() const {
         size_t count;
         const SkbActionFunc* table = ActionTable(&count);
@@ -60,6 +66,7 @@ class StalchildController : public AbstractActorController {
                 return (u8)(i);
         return ID_UNKNOWN;
     }
+
 
     u8 CurrentColliderRoles() const {
         EnSkb* skb = Typed();

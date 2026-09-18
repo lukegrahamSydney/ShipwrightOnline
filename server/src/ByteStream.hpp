@@ -157,7 +157,7 @@ public:
         return writePos;
     }
     template <class T> unsigned int Write(const T& source);
-    template <class T> T Read();
+    template <class T> T Read(bool* error = nullptr);
 };
 
 template <class T> ByteStream::ByteStream(const T& data) {
@@ -190,12 +190,20 @@ template <class T> ByteStream& ByteStream::operator>>(T& data) {
     return *this;
 }
 
-template <class T> T ByteStream::Read() {
+template <class T> T ByteStream::Read(bool* error) {
     T retVal{};
+
     if (BytesLeft() >= sizeof(T)) {
         memcpy(&retVal, &buffer[readPos], sizeof(T));
         readPos += (unsigned int)(sizeof(T));
     }
+    else {
+        if (error != nullptr)
+            *error = true;
+
+        Skip(BytesLeft());
+    }
+
     return retVal;
 }
 

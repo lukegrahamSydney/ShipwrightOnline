@@ -95,6 +95,11 @@ class StalfosController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
     u8 CurrentActionIndex() const {
         size_t count;
         const TestActionFunc* table = ActionTable(&count);
@@ -172,6 +177,11 @@ class StalfosController : public AbstractActorController {
         }
         return ANIM_UNKNOWN;
     }
+
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
+
     u8 CurrentAnimIndex() const {
         return AnimIndexFor(Typed()->skelAnime.animation);
     }

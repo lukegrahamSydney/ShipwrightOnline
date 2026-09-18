@@ -205,12 +205,12 @@ class PondFishController : public AbstractActorController {
 
             if (isHeld) {
                 char text[100];
-                snprintf(text, sizeof(text), "%.1f Lbs", WeightLbs());
+                snprintf(text, sizeof(text), "%.1f lbs", WeightLbs());
                 NameTag_RegisterForActorWithOptions(m_actor, text, {});
             } else {
                 //Alpha to 1 first...weird glitch with removing nametags
                 Color_RGBA8 colour = Color_RGBA8{ 255, 255, 255, 1 };
-                NameTag_ChangeActorTextColour(m_actor, &colour);
+                NameTag_ChangeActorTextColour(m_actor, &colour, nullptr);
                 NameTag_RemoveAllForActor(m_actor);
             
             }

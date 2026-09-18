@@ -55,6 +55,46 @@ class IkController : public AbstractActorController {
         ReinstallUpdate();
     }
 
+   void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+        EnIk* ik = Typed();
+
+        if (ik->actor.params == 0)
+            return;
+
+        int count = ZeldaOnlineClient::Instance != nullptr ? ZeldaOnlineClient::Instance->RollNeighbourCount(1.0f) : 0;
+
+        if (count <= 0)
+            return;
+
+        static constexpr f32 IK_SIDE_OFFSET = 90.0f;
+
+        s16 leftYaw = ik->actor.world.rot.y + 0x4000;
+
+        Vec3f left;
+        left.x = ik->actor.world.pos.x + (Math_SinS(leftYaw) * IK_SIDE_OFFSET);
+        left.y = ik->actor.world.pos.y;
+        left.z = ik->actor.world.pos.z + (Math_CosS(leftYaw) * IK_SIDE_OFFSET);
+
+        SpawnNeighbour(left, ik->actor.world.rot);
+
+        if (count < 2)
+            return;
+
+        s16 rightYaw = ik->actor.world.rot.y - 0x4000;
+
+        Vec3f right;
+        right.x = ik->actor.world.pos.x + (Math_SinS(rightYaw) * IK_SIDE_OFFSET);
+        right.y = ik->actor.world.pos.y;
+        right.z = ik->actor.world.pos.z + (Math_CosS(rightYaw) * IK_SIDE_OFFSET);
+
+        SpawnNeighbour(right, ik->actor.world.rot);
+    }
+
     u8 CurrentActionIndex() const {
         size_t count;
         const IkActionFunc* table = ActionTable(&count);

@@ -27,6 +27,7 @@ typedef struct {
     bool noZBuffer;            // Allow rendering over geometry
     Mtx* mtx;                  // Allocated Mtx for rendering
     Vtx* vtx;                  // Allocated Vtx for rendering
+    float scale;
 } NameTag;
 
 static std::vector<NameTag> nameTags;
@@ -63,7 +64,7 @@ void DrawNameTag(PlayState* play, const NameTag* nameTag) {
         alpha = (440000.0f - nameTag->actor->xyzDistToPlayerSq) / 80000.0f;
     }
 
-    float scale = 75.0f / 100.f;
+    float scale = nameTag->scale;//25.0f / 100.f;
 
     size_t numChar = nameTag->processedText.length();
     // No text to render
@@ -207,9 +208,9 @@ void UpdateNameTags() {
     sMirrorWorldActive = CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0);
 }
 
-extern "C" void NameTag_ChangeActorTextColour(Actor* actor, const Color_RGBA8* textColour) {
+extern "C" void NameTag_ChangeActorTextColour(Actor* actor, const Color_RGBA8* textColour, const char* tag) {
     for (auto& nameTag : nameTags) {
-        if (nameTag.actor == actor)
+        if (nameTag.actor == actor && (tag == nullptr || (nameTag.tag != nullptr && strcmp(nameTag.tag, tag) == 0)))
         {
             nameTag.textColor = *textColour;
             break;
@@ -276,6 +277,7 @@ extern "C" void NameTag_RegisterForActorWithOptions(Actor* actor, const char* te
     nameTag.noZBuffer = options.noZBuffer;
     nameTag.mtx = new Mtx();
     nameTag.vtx = vertices;
+    nameTag.scale = options.scale == 0.0f ? 0.75f : options.scale;
 
     nameTags.push_back(nameTag);
 
@@ -311,6 +313,21 @@ extern "C" void NameTag_RemoveAllByTag(const char* tag) {
 
     NameTag_RegisterHooks();
 }
+
+
+extern "C" void NameTag_RemoveAllByActorTag(Actor* actor, const char* tag) {
+    for (auto it = nameTags.begin(); it != nameTags.end();) {
+        if (it->actor == actor && it->tag != nullptr && strcmp(it->tag, tag) == 0) {
+            FreeNameTag(&(*it));
+            it = nameTags.erase(it);
+        } else {
+            it++;
+        }
+    }
+
+    NameTag_RegisterHooks();
+}
+
 
 void RemoveAllNameTags() {
     for (auto& nameTag : nameTags) {

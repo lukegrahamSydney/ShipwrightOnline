@@ -424,8 +424,8 @@ void EnGoma_Dead(EnGoma* this, PlayState* play) {
     if (this->actionTimer == 0 && Math_SmoothStepToF(&this->actor.scale.y, 0.0f, 0.5f, 0.00225f, 0.00001f) <= 0.001f) {
         if (this->actor.params < 6) {
             BossGoma* parent = (BossGoma*)this->actor.parent;
-
-            parent->childrenGohmaState[this->actor.params] = -1;
+            if (parent)
+                parent->childrenGohmaState[this->actor.params] = -1;
         }
         Audio_PlaySoundGeneral(NA_SE_EN_EXTINCT, &this->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -668,8 +668,8 @@ void EnGoma_UpdateHit(EnGoma* this, PlayState* play) {
                 // die if still an egg
                 if (this->actor.params <= 5) { //! BossGoma only has 3 children
                     BossGoma* parent = (BossGoma*)this->actor.parent;
-
-                    parent->childrenGohmaState[this->actor.params] = -1;
+                    if (parent)
+                        parent->childrenGohmaState[this->actor.params] = -1;
                 }
 
                 EnGoma_SpawnHatchDebris(this, play);

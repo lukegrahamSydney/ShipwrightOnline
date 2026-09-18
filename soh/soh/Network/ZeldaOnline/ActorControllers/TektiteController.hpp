@@ -61,6 +61,11 @@ class TektiteController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     u8 CurrentActionIndex() const {
         size_t count;
         const TiteActionFunc* table = ActionTable(&count);
@@ -102,6 +107,12 @@ class TektiteController : public AbstractActorController {
                 return nullptr;
         }
     }
+
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
+
+
     u8 CurrentAnimIndex() const {
         const char* cur = (const char*)Typed()->skelAnime.animation;
         if (cur == nullptr)

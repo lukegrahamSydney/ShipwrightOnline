@@ -44,7 +44,13 @@ class OctorokController : public AbstractActorController {
         return Typed()->actor.params == ParamsProjectile;
     }
 
-    
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursWater(play, 1.0f);
+    }
     void OnActorInit() override {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
     }

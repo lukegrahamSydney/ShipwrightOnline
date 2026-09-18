@@ -329,6 +329,15 @@ class AbstractActorController {
         return actor;
     }
 
+    void DisableNeighbourSpawn() {
+        m_canSpawnNeighbour = false;
+    }
+
+    bool CanNeighbourSpawn() const {
+        return m_canSpawnNeighbour;
+    }
+
+
   protected:
     static u8 PackColliderFlags(const Collider& c) {
         return (c.acFlags & AC_ON ? 1 : 0) | (c.atFlags & AT_ON ? 2 : 0) | (c.ocFlags1 & OC1_ON ? 4 : 0);
@@ -519,6 +528,30 @@ class AbstractActorController {
 
     bool EndConversation(PlayState* play);
 
+
+    int RollNeighbourCount(float weight) const;
+    float RollEnemyHealthMultiplier(float weight) const;
+    float RollBossHealthMultiplier(float weight) const;
+
+    virtual void SpawnNeighbours(PlayState* play) {
+    }
+
+    Actor* SpawnNeighbourActor(int actorID, const Vec3f& pos, const Vec3s& rot, int params);
+    virtual Actor* SpawnNeighbour(const Vec3f& pos, const Vec3s& rot);
+
+    void SpawnNeighboursGround(PlayState* play, float weight, f32 minRadius = 100.0f, f32 maxRadius = 500.0f);
+
+    void SpawnNeighboursWall(PlayState* play, f32 weight, const Vec3f& normal, const Vec3f& tangentU,
+                             const Vec3f& tangentV, f32 minRadius = 100.0f, f32 maxRadius = 500.0f);
+
+    void SpawnNeighboursWater(PlayState* play, float weight, f32 minRadius = 100.0f, f32 maxRadius = 500.0f);
+
+    void SpawnNeighboursAir(PlayState* play, float weight, f32 minRadius = 100.0f, f32 maxRadius = 500.0f);
+    bool FindGroundSpawn(PlayState* play, Vec3f* out, f32 minRadius, f32 maxRadius);
+    bool FindWallSpawn(PlayState* play, const Vec3f& normal, const Vec3f& tangentU, const Vec3f& tangentV, f32 minRadius, f32 maxRadius, Vec3f* outPos, Vec3s* outRot);
+    bool FindAirSpawn(PlayState* play, Vec3f* out, f32 minRadius, f32 maxRadius);
+    bool FindWaterSpawn(PlayState* play, Vec3f* out, f32 minRadius, f32 maxRadius);
+
     void ReinstallUpdate() {
         if (m_actor->update != nullptr && m_actor->update != &AbstractActorController::DispatchUpdate) {
             m_originalUpdate = m_actor->update;
@@ -571,9 +604,10 @@ class AbstractActorController {
     }
 
     Actor* m_actor;
+    int m_originalParams;
 
     PosRot m_spawnPosRot{};
-
+    bool m_canSpawnNeighbour = true;
     int m_networkID;
     int m_sceneKey;
     int m_roomIndex;

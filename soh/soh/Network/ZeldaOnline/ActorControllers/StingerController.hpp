@@ -58,6 +58,15 @@ class StingerController : public AbstractActorController {
         return ID_UNKNOWN;
     }
 
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
+    }
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     static constexpr u8 ANIM_COUNT = 3;
     static constexpr u8 ANIM_UNKNOWN = 0xFF;
 

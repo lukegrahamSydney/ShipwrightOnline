@@ -188,7 +188,7 @@ class PhantomGanonController : public AbstractActorController {
     };
 
     void InitActorHealth() override {
-        //Typed()->actor.colChkInfo.health *= 2;
+        Typed()->actor.colChkInfo.health =(int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
     }
 
     void OnActorInit() override {

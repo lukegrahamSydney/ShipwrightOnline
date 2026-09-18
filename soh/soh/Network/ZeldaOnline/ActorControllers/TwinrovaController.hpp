@@ -133,6 +133,10 @@ class TwinrovaController : public AbstractBossController {
         return (tw->actionFunc == BossTw_TwinrovaMergeCS && tw->unk_5F9 != 0) ? &tw->subCamEye2 : &tw->subCamEye;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
     bool IsBlast() const {
         return Typed()->actor.params >= TW_FIRE_BLAST;
     }

@@ -131,6 +131,11 @@ class FloormasterController : public AbstractActorController {
         return (Typed()->actor.params & FLOORMAS_SPAWN_SMALL) != 0;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     void LinkRing(PlayState* play) {
         EnFloormas* fm = Typed();
 

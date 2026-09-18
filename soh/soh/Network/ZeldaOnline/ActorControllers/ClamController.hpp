@@ -44,6 +44,11 @@ class ClamController : public AbstractActorController {
         return sTable;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     u8 CurrentActionIndex() const {
         size_t count;
         const SbActionFunc* table = ActionTable(&count);
@@ -179,7 +184,6 @@ class ClamController : public AbstractActorController {
 
         Actor_SetFocus(&sb->actor, 20.0f);
 
-        //the bubbles come from EnSb_Open, which a puppet never runs.
         if (sb->actionFunc == EnSb_Open && sb->actor.yDistToWater > 0.0f) {
             EnSb_SpawnBubbles(play, sb);
         }

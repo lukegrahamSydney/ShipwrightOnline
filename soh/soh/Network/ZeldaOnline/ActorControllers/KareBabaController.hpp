@@ -15,7 +15,6 @@ void EnKarebaba_Retract(EnKarebaba*, PlayState*);
 void EnKarebaba_Dead(EnKarebaba*, PlayState*);
 void EnKarebaba_Regrow(EnKarebaba*, PlayState*);
 void EnKarebaba_Upright(EnKarebaba*, PlayState*);
-
 }
 
 namespace ZeldaOnline {
@@ -38,6 +37,7 @@ class KareBabaController : public AbstractActorController {
         PROP_COLL_ROLES,
         PROP_PARAMS,
         PROP_SHADOW_SCALE,
+        PROP_CATEGORY,
         PROP_ANIM_CUR_FRAME,
         PROP_ANIM,
     };
@@ -52,8 +52,17 @@ class KareBabaController : public AbstractActorController {
         return sTable;
     }
 
-   void OnActorInit() override {
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
+    void OnActorInit() override {
         Typed()->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+        SpawnNeighboursGround(play, 1.0f);
     }
 
     u8 CurrentActionIndex() const {
@@ -95,20 +104,24 @@ class KareBabaController : public AbstractActorController {
         PackProperty(PROP_ACTION, PackedUInt1(CurrentActionIndex()), out);
 
         u8 acConfig = kb->bodyCollider.base.acFlags & ~(AC_HIT | AC_BOUNCED);
-        PackProperty(PROP_BODY_COLL, ByteStream()
-                                                << PackedInt2(kb->bodyCollider.dim.radius)
-                                                << PackedInt2(kb->bodyCollider.dim.height)
-                                                << PackedUInt1(kb->bodyCollider.base.colType) << PackedUInt1(acConfig)
-                                                << PackedUInt4(kb->bodyCollider.info.bumper.dmgFlags), out);
+        PackProperty(PROP_BODY_COLL,
+                     ByteStream() << PackedInt2(kb->bodyCollider.dim.radius) << PackedInt2(kb->bodyCollider.dim.height)
+                                  << PackedUInt1(kb->bodyCollider.base.colType) << PackedUInt1(acConfig)
+                                  << PackedUInt4(kb->bodyCollider.info.bumper.dmgFlags),
+                     out);
 
-        PackProperty(PROP_HEAD_COLL, ByteStream() << PackedInt2(kb->headCollider.dim.radius)
-                                                         << PackedInt2(kb->headCollider.dim.height), out);
+        PackProperty(PROP_HEAD_COLL,
+                     ByteStream() << PackedInt2(kb->headCollider.dim.radius) << PackedInt2(kb->headCollider.dim.height),
+                     out);
         PackProperty(PROP_PARAMS, PackedInt2(kb->actor.params), out);
 
         u8 bodyRoles, headRoles;
         CurrentColliderRoles(&bodyRoles, &headRoles);
         PackProperty(PROP_COLL_ROLES, ByteStream() << PackedUInt1(bodyRoles) << PackedUInt1(headRoles), out);
         PackProperty(PROP_SHADOW_SCALE, PackedFloat4(kb->actor.shape.shadowScale), out);
+        PackProperty(PROP_CATEGORY, PackedUInt1(kb->actor.category), out);
+
+        BuildStandardExtendedProperty(PROP_GRAVITY, out);
 
         if (LOCK_CUR_FRAME)
             PackProperty(PROP_ANIM_CUR_FRAME, PackedFloat4(kb->skelAnime.curFrame), out);
@@ -166,6 +179,15 @@ class KareBabaController : public AbstractActorController {
             case PROP_SHADOW_SCALE:
                 kb->actor.shape.shadowScale = data.Read<PackedFloat4>().value();
                 return true;
+
+            case PROP_CATEGORY: {
+                u8 category = (u8)(data.Read<PackedUInt1>().value());
+
+                if (gPlayState != nullptr && kb->actor.category != category)
+                    Actor_ChangeCategory(gPlayState, &gPlayState->actorCtx, &kb->actor, category);
+
+                return true;
+            }
             default:
                 return false;
         }
@@ -190,15 +212,28 @@ class KareBabaController : public AbstractActorController {
             Actor_SetFocus(&kb->actor, (kb->actor.scale.x * 10.0f) / 0.01f);
         }
 
+        if (kb->actionFunc == EnKarebaba_DeadItemDrop) {
+            if (Actor_HasParent(&kb->actor, play)) {
+                ClaimLeadership(CLAIM_REASON_NOW);
+                UpdateLeader(play);
+                return;
+            }
+
+            if (kb->actor.params != 0)
+                Actor_OfferGetItemNearby(&kb->actor, play, GI_STICKS_1);
+        }
+
         RegisterColliderBase(play, &kb->bodyCollider.base, m_bodyRoles);
         RegisterColliderBase(play, &kb->headCollider.base, m_headRoles);
     }
+
+
 
   private:
     u8 m_bodyRoles = 0;
     u8 m_headRoles = 0;
 };
 
-}
+} // namespace ZeldaOnline
 
 #endif

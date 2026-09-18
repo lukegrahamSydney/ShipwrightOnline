@@ -92,6 +92,10 @@ class SkulltulaController : public AbstractActorController {
         return (void*)gEnStAnimationInfo[i].animation;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
     //current actors animation to an index to be sent
     u8 CurrentAnimIndex() const {
         for (int i = 0; i < ANIM_COUNT; i++)

@@ -60,6 +60,11 @@ class ReebaController : public AbstractActorController {
         return ID_UNKNOWN;
     }
 
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollEnemyHealthMultiplier(1.0f));
+    }
+
     bool IsDying() const {
         EnReeba* rb = Typed();
         return rb->actionfunc == EnReeba_SetupDie || rb->actionfunc == EnReeba_Die ||

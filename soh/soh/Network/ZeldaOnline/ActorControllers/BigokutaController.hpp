@@ -7,6 +7,7 @@
 extern "C" {
 #include "src/overlays/actors/ovl_En_Bigokuta/z_en_bigokuta.h"
 #include "objects/object_bigokuta/object_bigokuta.h"
+#include "src/overlays/actors/ovl_En_Zf/z_en_zf.h"
 
 void func_809BD84C(EnBigokuta* bo, PlayState* play);
 void func_809BD8DC(EnBigokuta* bo, PlayState* play);
@@ -72,6 +73,46 @@ class BigokutaController : public AbstractActorController {
                 return (u8)(i);
         return ID_UNKNOWN;
     }
+
+    void InitActorHealth() override {
+        Typed()->actor.colChkInfo.health =
+            (int)std::roundf(Typed()->actor.colChkInfo.health * RollBossHealthMultiplier(1.0f));
+    }
+
+    void SpawnNeighbours(PlayState* play) override {
+        int count = RollNeighbourCount(1.0f);
+
+        if (count <= 0)
+            return;
+
+        static constexpr f32 SIDE_OFFSET = 120.0f;
+
+        s16 leftYaw = m_actor->world.rot.y + 0x4000;
+
+        Vec3f left;
+        left.x = m_actor->world.pos.x + (Math_SinS(leftYaw) * SIDE_OFFSET);
+        left.y = m_actor->world.pos.y;
+        left.z = m_actor->world.pos.z + (Math_CosS(leftYaw) * SIDE_OFFSET);
+
+        SpawnNeighbour(left, m_actor->world.rot);
+
+        if (count < 2)
+            return;
+
+        s16 rightYaw = m_actor->world.rot.y - 0x4000;
+
+        Vec3f right;
+        right.x = m_actor->world.pos.x + (Math_SinS(rightYaw) * SIDE_OFFSET);
+        right.y = m_actor->world.pos.y;
+        right.z = m_actor->world.pos.z + (Math_CosS(rightYaw) * SIDE_OFFSET);
+
+        SpawnNeighbour(right, m_actor->world.rot);
+    }
+
+    Actor* SpawnNeighbour(const Vec3f& pos, const Vec3s& rot) override {
+        return SpawnNeighbourActor(ACTOR_EN_ZF, pos, rot, ENZF_TYPE_LIZALFOS_LONE);
+    }
+
 
     static constexpr u8 ANIM_0 = 0;
     static constexpr u8 ANIM_1 = 1;

@@ -151,6 +151,7 @@ class PlayerPuppetController : public AbstractActorController {
         return m_fishing.m_lurePos;
     }
 
+    void SetChatText(const std::string& text, const Color_RGBA8& colour);
   protected:
     void UpdatePuppet(PlayState* play) override;
 
@@ -169,6 +170,8 @@ class PlayerPuppetController : public AbstractActorController {
 
     void DrawFishingRod(PlayState* play);
     void DrawFishingLureAndLine(PlayState* play);
+
+
 
   private:
     Vec3f m_pos{};
@@ -221,6 +224,10 @@ class PlayerPuppetController : public AbstractActorController {
     Actor* m_hookshot = nullptr;
 
     u8 m_pendingHorsePresent = 0;
+    struct {
+        int m_visibleTimer = 0;
+        std::string m_text = "";
+    } m_chat;
 
     std::string m_nickName = "Player";
     bool m_paused = false;
