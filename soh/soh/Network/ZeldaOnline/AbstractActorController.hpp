@@ -132,6 +132,11 @@ class AbstractActorController {
     virtual bool CanSpawnActorOverNetwork(s16 actorId, s16 params) {
         return false;
     }
+
+    virtual bool CanAddStaticActorOverNetwork(s16 actorId, s16 params) {
+        return false;
+    }
+
     void SetLeader(bool leader) {
         if (m_runningLocally)
             return;

@@ -154,6 +154,14 @@ class ShopnutsController : public AbstractActorController {
         return true;
     }
 
+    bool CanSpawnActorOverNetwork(s16 actorId, s16 params) override {
+        return (actorId == ACTOR_EN_DNS);
+    }
+
+    bool CanAddStaticActorOverNetwork(s16 actorId, s16 params) override {
+        return (actorId == ACTOR_EN_DNS);
+    }
+
     void UpdatePuppet(PlayState* play) override {
         EnShopnuts* sn = Typed();
 

@@ -299,17 +299,17 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     ImGui::SliderFloat("##zo_enemy_health_weight", &m_partySettings.enemyHealthWeight, 0.0f, 5.0f,
-                                       "Enemy %.1f", ImGuiSliderFlags_AlwaysClamp);
+                                       "Enemy Health Weight %.1f", ImGuiSliderFlags_AlwaysClamp);
 
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                        ImGui::SetTooltip("Health weight for regular enemies.");
+                        ImGui::SetTooltip("Health weight for regular enemies.\nHealth increases by 0.25 x Party Size x Weight");
 
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     ImGui::SliderFloat("##zo_boss_health_weight", &m_partySettings.bossHealthWeight, 0.0f, 5.0f,
-                                       "Boss %.1f", ImGuiSliderFlags_AlwaysClamp);
+                                       "Boss Health Weight %.1f", ImGuiSliderFlags_AlwaysClamp);
 
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                        ImGui::SetTooltip("Health weight for bosses.");
+                        ImGui::SetTooltip("Health weight for bosses.\nHealth increases by 0.25 x Party Size x Weight");
 
                     if (!m_partySettings.healthMultiplier)
                         ImGui::EndDisabled();

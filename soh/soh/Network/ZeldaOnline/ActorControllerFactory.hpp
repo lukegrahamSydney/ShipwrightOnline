@@ -300,7 +300,7 @@ class ActorControllerFactory {
         Register<WolfosController>(ACTOR_EN_WF);
         Register<StalfosController>(ACTOR_EN_TEST);
         Register<OctorokController>(ACTOR_EN_OKUTA);
-        Register<ShopScrubController>(ACTOR_EN_DNS);
+        //Register<ShopScrubController>(ACTOR_EN_DNS);
         Register<BiliController>(ACTOR_EN_BILI);
         Register<ShopnutsController>(ACTOR_EN_SHOPNUTS);
         Register<BubbleController>(ACTOR_EN_BUBBLE);

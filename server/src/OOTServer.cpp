@@ -1764,8 +1764,9 @@ namespace ZeldaOnline
 		case CLIENT_PACKET_KEEP_ALIVE:
 			break;
 
-		case CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART:
+		case CLIENT_PACKET_ADD_STATIC_ACTOR:
 		{
+			printf("RECEIVED a\n");
 			if (data.BytesLeft() < 5)
 				break;
 
@@ -1773,48 +1774,54 @@ namespace ZeldaOnline
 			int roomIndex = (int)(data.Read<PackedInt1>().value());
 
 			Scene* scene = player->CurrentScene();
-			//Dodongos dead body remains in the scene and will correctly spawn the warp and heart for that player. We do not need to store the warp/heart
-			//others too
-		
-			if (!scene || scene->ClientSceneKey() != sceneKey 
-				|| scene->SceneNum() == SCENE_DODONGOS_CAVERN_BOSS 
-				|| scene->SceneNum() == SCENE_FIRE_TEMPLE_BOSS 
-				|| scene->SceneNum() == SCENE_WATER_TEMPLE_BOSS 
-				|| scene->SceneNum() == SCENE_SPIRIT_TEMPLE_BOSS
-				|| scene->SceneNum() == SCENE_JABU_JABU_BOSS)
+			printf("RECEIVED b\n");
+			if (!scene || scene->ClientSceneKey() != sceneKey)
 				break;
-
-			if (!scene->IsBoss())
-				break;
-
+			printf("RECEIVED c\n");
 			auto room = scene->GetRoom(roomIndex);
 			if (!room)
 				break;
 
-			auto actorID = (int16_t)data.Read<PackedUInt2>().value();
-			auto x = data.Read<PackedFloat4>().value();
-			auto y = data.Read<PackedFloat4>().value();
-			auto z = data.Read<PackedFloat4>().value();
-			auto rotX = data.Read<PackedInt2>().value();
-			auto rotY = data.Read<PackedInt2>().value();
-			auto rotZ = data.Read<PackedInt2>().value();
-			int16_t params = data.Read<PackedInt2>().value();
+			int networkID = data.Read<PackedUInt2>().value();
 
-			if (actorID != ActorID::ACTOR_DOOR_WARP1 && actorID != ActorID::ACTOR_ITEM_B_HEART)
-				break;
-
-			auto& actors = room->StaticActors();
-			bool found = false;
-			for (auto& existing : actors)
+			if (networkID > 0)
 			{
-				if (existing.actorID == actorID) {
-					found = true;
-					break;
-				}
-			}
+				printf("RECEIVED d\n");
+				auto actorID = (int16_t)data.Read<PackedUInt2>().value();
+				auto x = data.Read<PackedFloat4>().value();
+				auto y = data.Read<PackedFloat4>().value();
+				auto z = data.Read<PackedFloat4>().value();
+				auto rotX = data.Read<PackedInt2>().value();
+				auto rotY = data.Read<PackedInt2>().value();
+				auto rotZ = data.Read<PackedInt2>().value();
+				int16_t params = data.Read<PackedInt2>().value();
 
-			if (!found) {
+				//Special handling for warp gates and heart pieces...
+				bool heartOrWarp = actorID == ActorID::ACTOR_DOOR_WARP1 || actorID == ActorID::ACTOR_ITEM_B_HEART;
+				if (heartOrWarp)
+				{
+					if (!scene->IsBoss())
+						break;
+
+					if (scene->SceneNum() == SCENE_DODONGOS_CAVERN_BOSS || scene->SceneNum() == SCENE_FIRE_TEMPLE_BOSS || scene->SceneNum() == SCENE_WATER_TEMPLE_BOSS || scene->SceneNum() == SCENE_SPIRIT_TEMPLE_BOSS || scene->SceneNum() == SCENE_JABU_JABU_BOSS)
+						break;
+
+					auto& actors = room->StaticActors();
+					bool found = false;
+					for (auto& existing : actors)
+					{
+						if (existing.actorID == actorID) {
+							found = true;
+							break;
+						}
+					}
+
+					if (found)
+						break;
+				}
+
 				room->AddStaticActor({ actorID, params, x, y, z, rotX, rotY, rotZ });
+
 			}
 		}
 		break;

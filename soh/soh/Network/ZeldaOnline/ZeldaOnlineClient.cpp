@@ -2578,32 +2578,33 @@ Actor* ZeldaOnlineClient::SpawnActor(s16 actorId, f32 posX, f32 posY, f32 posZ, 
         return nullptr;
 
 
-
-    if (!isConnected || !ActorControllerFactory::Instance().IsNetworked(actorId, params)) {
+    if (!isConnected || !ActorControllerFactory::Instance().IsNetworked(actorId, params))
+    {
 
         auto currentExecutingController = AbstractActorController::CurrentLeaderContext();
-        if (currentExecutingController != nullptr &&
-            currentExecutingController->CanSpawnActorOverNetwork(actorId, params)) {
-            SendRoomTrigger("spawn", ByteStream() << PackedUInt2(actorId) << PackedFloat4(posX) << PackedFloat4(posY)
-                                                  << PackedFloat4(posZ) << PackedInt2(rotX) << PackedInt2(rotY)
-                                                  << PackedInt2(rotZ) << PackedInt2(params));
-        }
+        if (currentExecutingController != nullptr) {
+            if (currentExecutingController->CanSpawnActorOverNetwork(actorId, params)) {
+                SendRoomTrigger("spawn", ByteStream()
+                                                << PackedUInt2(actorId) << PackedFloat4(posX) << PackedFloat4(posY)
+                                                << PackedFloat4(posZ) << PackedInt2(rotX) << PackedInt2(rotY)
+                                                << PackedInt2(rotZ) << PackedInt2(params));
+            }
 
-        if (actorId == ACTOR_DOOR_WARP1 || actorId == ACTOR_ITEM_B_HEART) {
-            WritePacket(newPacket(CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART)
-                        << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0,
-                                                    GetSceneVariant(gPlayState->sceneNum)))
-                        << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2((u16)(actorId))
-                        << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
-                        << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
-
-            return Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ,
-                                     posX, posY, posZ, rotX, rotY, rotZ, params, 0);
+            if (actorId == ACTOR_DOOR_WARP1 || actorId == ACTOR_ITEM_B_HEART ||
+                currentExecutingController->CanAddStaticActorOverNetwork(actorId, params)) {
+                WritePacket(newPacket(CLIENT_PACKET_ADD_STATIC_ACTOR)
+                            << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0,
+                                                        GetSceneVariant(gPlayState->sceneNum)))
+                            << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2(currentExecutingController->NetworkID())<< PackedUInt2((u16)(actorId))
+                            << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
+                            << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
+            }
         }
 
         return Actor_SpawnDirect(&gPlayState->actorCtx, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX,
                                  posY, posZ, rotX, rotY, rotZ, params, 0);
     }
+
 
     if (IsClusterDedupActor(actorId)) {
         if (Actor* existing = FindExistingActor(actorId, params, ACTORCAT_PROP, posX, posZ)) {
@@ -2669,13 +2670,20 @@ Actor* ZeldaOnlineClient::SpawnActorAsChild(Actor* parent, s16 actorId, f32 posX
         return nullptr;
 
     if (actorId == ACTOR_DOOR_WARP1 || actorId == ACTOR_ITEM_B_HEART) {
-        WritePacket(newPacket(CLIENT_PACKET_SPAWN_DOORWARP_OR_HEART)
-                    << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum)))
-                    << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2((u16)(actorId))
-                    << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
-                    << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
+        auto currentExecutingController = AbstractActorController::CurrentLeaderContext();
+        if (currentExecutingController != nullptr)
+        {
+            WritePacket(newPacket(CLIENT_PACKET_ADD_STATIC_ACTOR)
+                        << PackedUInt4(MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0,
+                                                    GetSceneVariant(gPlayState->sceneNum)))
+                        << PackedInt1(gPlayState->roomCtx.curRoom.num) << PackedUInt2(currentExecutingController->NetworkID())
+                        << PackedUInt2((u16)(actorId))
+                        << PackedFloat4(posX) << PackedFloat4(posY) << PackedFloat4(posZ) << PackedInt2(rotX)
+                        << PackedInt2(rotY) << PackedInt2(rotZ) << PackedInt2(params));
 
-        return Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parent, gPlayState, actorId, posX, posY, posZ, rotX, rotY, rotZ, posX, posY, posZ, rotX, rotY, rotZ, params, 0);
+            return Actor_SpawnAsChildDirect(&gPlayState->actorCtx, parent, gPlayState, actorId, posX, posY, posZ, rotX,
+                                            rotY, rotZ, posX, posY, posZ, rotX, rotY, rotZ, params, 0);
+        }
     }
 
     bool shouldNotNetworkSpawn = !ActorControllerFactory::Instance().IsNetworked(actorId, params) || !isConnected ||
