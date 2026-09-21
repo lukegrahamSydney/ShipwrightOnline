@@ -114,7 +114,7 @@ namespace ZeldaOnline
         }
 
         else if (name == "arrow") {
-            if (data.BytesLeft() < 26 || gPlayState == NULL)
+            if (data.BytesLeft() < 27 || gPlayState == NULL)
                 return;
 
             f32 x = data.Read<PackedFloat4>().value();
@@ -125,6 +125,9 @@ namespace ZeldaOnline
             s16 params = (s16)(data.Read<PackedInt2>().value());
             f32 speedXZ = data.Read<PackedFloat4>().value();
             f32 velY = data.Read<PackedFloat4>().value();
+            bool pvp = data.Read<PackedUInt1>().value();
+
+            bool pvpActive = pvp && CVarGetInteger("gZeldaOnline.Pvp", 0) != 0;
 
             if (params == ARROW_NUT) {
                 Player* localPlayer = GET_PLAYER(gPlayState);
@@ -137,7 +140,7 @@ namespace ZeldaOnline
                 }
             }
 
-             x -= speedXZ * Math_SinS(ry);
+            x -= speedXZ * Math_SinS(ry);
             y -= velY;
             z -= speedXZ * Math_CosS(ry);
 
@@ -160,14 +163,12 @@ namespace ZeldaOnline
                         arrow->actor.shape.rot.x = arrow->actor.shape.rot.y = arrow->actor.shape.rot.z = 0;
                     }
 
-                    if (true) {
-                        arrow->collider.base.atFlags =
-                            (arrow->collider.base.atFlags & ~AT_TYPE_ALL) | AT_TYPE_ENEMY;
+                    if (pvpActive) {
+                        arrow->collider.base.atFlags = (arrow->collider.base.atFlags & ~AT_TYPE_ALL) | AT_TYPE_ENEMY;
                     } else {
                         arrow->collider.base.atFlags &= ~AT_ON;
                     }
                 }
-                
             }
         }
 

@@ -324,7 +324,8 @@ class ActorControllerFactory {
         Register<ReebaController>(ACTOR_EN_REEBA);
         Register<MoblinController>(ACTOR_EN_MB);
         Register<MoriBigstController>(ACTOR_BG_MORI_BIGST);
-        Register<MoriElevatorController>(ACTOR_BG_MORI_ELEVATOR);
+        //Forest temple elevator
+        //Register<MoriElevatorController>(ACTOR_BG_MORI_ELEVATOR);
         Register<PhantomFireController>(ACTOR_EN_FHG_FIRE);
 
         Register<HakaTrapController>(ACTOR_BG_HAKA_TRAP);

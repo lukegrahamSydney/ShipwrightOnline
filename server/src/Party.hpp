@@ -119,6 +119,17 @@ namespace ZeldaOnline
 			return m_privateDungeons;
 		}
 
+		void SetDungeonKeys(int mapIndex, uint8_t count) {
+			if (mapIndex >= 0 && mapIndex < 19)
+				m_dungeonKeys[mapIndex] = count;
+		}
+
+		uint8_t DungeonKeys(int mapIndex) const {
+			if (mapIndex >= 0 && mapIndex < 19)
+				return m_dungeonKeys[mapIndex];
+			return 0;
+		}
+
 		Player* GetAdmin() {
 			if (m_members.size())
 				return m_members[0];
@@ -135,6 +146,7 @@ namespace ZeldaOnline
 		std::unordered_set<uint64_t> m_invitedPlayers;
 		std::string m_settings;
 		bool m_privateDungeons = false;
+		uint8_t m_dungeonKeys[19]{};
 
 		inline static uint32_t s_nextID = 1;
 		inline static std::unordered_map<uint32_t, std::weak_ptr<Party>> s_parties;

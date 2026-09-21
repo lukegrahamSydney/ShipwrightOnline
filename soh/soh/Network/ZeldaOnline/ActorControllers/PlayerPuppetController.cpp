@@ -167,6 +167,8 @@ static Actor* FindLocalHorse(Player* player) {
 
 void PlayerPuppetController::BuildLocalPlayerProperties(Player* player, const std::string& nickName,
                                                         ByteStream& out) {
+    bool pvpEnabled = CVarGetInteger("gZeldaOnline.Pvp", 0);
+
     Actor* horseActor = FindLocalHorse(player);
     PackProperty(PROP_POS_X, PackedFloat4(player->actor.world.pos.x), out);
     PackProperty(PROP_POS_Y, PackedFloat4(player->actor.world.pos.y), out);
@@ -306,9 +308,10 @@ void PlayerPuppetController::BuildLocalPlayerProperties(Player* player, const st
 
     PackProperty(PPROP_HELD_ACTOR, PackedUInt4(heldId), out);
 
-    if ((player->meleeWeaponState > 0) &&
+    if (pvpEnabled &&
+        ((player->meleeWeaponState > 0) &&
         ((player->meleeWeaponAnimation < 0x18) || (player->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING)) &&
-        (player->meleeWeaponInfo[1].active)) {
+        (player->meleeWeaponInfo[1].active))) {
 
         ByteStream payload;
         payload << PackedFloat4(player->meleeWeaponInfo[1].tip.x) << PackedFloat4(player->meleeWeaponInfo[1].tip.y)
@@ -327,7 +330,8 @@ void PlayerPuppetController::BuildLocalPlayerProperties(Player* player, const st
         ByteStream payload;
         payload << PackedFloat4(boom->world.pos.x) << PackedFloat4(boom->world.pos.y)
                 << PackedFloat4(boom->world.pos.z);
-        payload << PackedInt2(boom->shape.rot.x) << PackedInt2(boom->shape.rot.y) << PackedInt2(boom->shape.rot.z);
+        payload << PackedInt2(boom->shape.rot.x) << PackedInt2(boom->shape.rot.y) << PackedInt2(boom->shape.rot.z)
+                << PackedUInt1(pvpEnabled);
         PackProperty(PPROP_BOOMERANG, payload, out);
     } else {
         PackNullProperty(PPROP_BOOMERANG, out);
@@ -492,21 +496,24 @@ void PlayerPuppetController::KillHookshot() {
     Actor_Kill(m_hookshot);
     m_hookshot = nullptr;
 }
+
 void PlayerPuppetController::UpdateSwordHitbox(PlayState* play) {
-    if (!m_hitting) {
-        if (m_swordQuad.base.actor != nullptr) {
-            Collider_ResetQuadAT(play, &m_swordQuad.base);
-            Collider_DestroyQuad(play, &m_swordQuad);
-            m_swordQuad.base.actor = nullptr;
+    if (CVarGetInteger("gZeldaOnline.Pvp", 0)) {
+        if (!m_hitting) {
+            if (m_swordQuad.base.actor != nullptr) {
+                Collider_ResetQuadAT(play, &m_swordQuad.base);
+                Collider_DestroyQuad(play, &m_swordQuad);
+                m_swordQuad.base.actor = nullptr;
+            }
+            return;
         }
-        return;
-    }
 
-    if (!m_hasValidHitQuad)
-        return;
+        if (!m_hasValidHitQuad)
+            return;
 
-    if (m_swordQuad.base.actor != nullptr) {
-        CollisionCheck_SetAT(play, &play->colChkCtx, &m_swordQuad.base);
+        if (m_swordQuad.base.actor != nullptr) {
+            CollisionCheck_SetAT(play, &play->colChkCtx, &m_swordQuad.base);
+        }
     }
 }
 
@@ -718,6 +725,9 @@ bool PlayerPuppetController::ApplyCustomProperty(unsigned int index, ByteStream&
             rot.x = (s16)(data.Read<PackedInt2>().value());
             rot.y = (s16)(data.Read<PackedInt2>().value());
             rot.z = (s16)(data.Read<PackedInt2>().value());
+            bool pvp = data.Read<PackedUInt1>().value();
+
+            bool pvpActive = pvp && CVarGetInteger("gZeldaOnline.Pvp", 0) != 0;
 
             if (m_boomerang == nullptr) {
 
@@ -728,7 +738,6 @@ bool PlayerPuppetController::ApplyCustomProperty(unsigned int index, ByteStream&
                     boom->actor.update = BoomerangPuppet_Update;
                     boom->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
                     boom->actor.room = -1;
-                    boom->collider.base.atFlags = AT_ON | AT_TYPE_ENEMY;
                     boom->collider.info.toucher.damage = 4;
                     m_boomerang = (Actor*)boom;
                 }
@@ -738,6 +747,14 @@ bool PlayerPuppetController::ApplyCustomProperty(unsigned int index, ByteStream&
                 m_boomerang->world.pos = pos;
                 m_boomerang->shape.rot = rot;
                 m_boomerang->world.rot = rot;
+
+                auto boom = reinterpret_cast<EnBoom*>(m_boomerang);
+
+                if (pvpActive) {
+                    boom->collider.base.atFlags = AT_ON | AT_TYPE_ENEMY;
+                } else {
+                    boom->collider.base.atFlags &= ~AT_ON;
+                }
             }
             return true;
         }

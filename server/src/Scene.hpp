@@ -19,7 +19,6 @@
 #include "Guid.hpp"
 #include "SceneID.hpp"
 
-
 namespace ZeldaOnline
 {
 	class OOTServer;
@@ -64,6 +63,8 @@ namespace ZeldaOnline
 
 		int m_otherVariant = 0;
 
+		uint16_t m_mapIndex;
+
 		std::unordered_map<int, Player*> m_players;
 		std::unordered_map<int, bool> m_eventINFFlags;
 		std::unordered_map<int, bool> m_INFFlags;
@@ -76,6 +77,7 @@ namespace ZeldaOnline
 
 	
 
+		int m_dungeonKeyCount = 0;
 		uint32_t m_sceneFlags = 0U;
 		uint32_t m_clearFlags = 0U;
 		uint32_t m_tempFlags = 0U;
@@ -145,9 +147,9 @@ namespace ZeldaOnline
 
 	public:
 		Scene(OOTServer* server, ActorRegistry* registry,
-			uint64_t sceneKey, int sceneNum, int isFuture, int otherVariant) :
+			uint64_t sceneKey, int sceneNum, int isFuture, int otherVariant, uint16_t mapIndex) :
 			m_server(server), m_registry(registry), m_sceneKey(sceneKey), m_sceneNum(sceneNum),
-			m_isFuture(isFuture), m_otherVariant(otherVariant)
+			m_isFuture(isFuture), m_otherVariant(otherVariant), m_mapIndex(mapIndex)
 		{
 			m_lastPlayerLeftTime = std::chrono::steady_clock::now();
 
@@ -191,11 +193,25 @@ namespace ZeldaOnline
 		int SceneNum() const {
 			return m_sceneNum;
 		}
+
 		int IsFuture() const {
 			return m_isFuture;
 		}
+
 		int OtherVariant() const {
 			return m_otherVariant;
+		}
+
+		uint16_t MapIndex() const {
+			return m_mapIndex;
+		}
+
+		void SetDungeonKeyCount(int count) {
+			m_dungeonKeyCount = count;
+		}
+
+		int DungeonKeyCount() const {
+			return m_dungeonKeyCount;
 		}
 
 		virtual bool IsDungeon() const {
@@ -266,14 +282,7 @@ namespace ZeldaOnline
 		}
 
 
-		virtual void OnFirstPlayerEnters() {
-			//If not a dungeon, reset all, if dungeon reset after 10 minutes
-			if (!IsDungeon() || (std::chrono::steady_clock::now() - m_lastPlayerLeftTime) > DUNGEON_RESET_TIMER)
-			{
-				ResetScene();
-
-			}
-		}
+		virtual void OnFirstPlayerEnters();
 
 		virtual void ResetScene() {
 			printf("RESETTING THE SCENE\n");
@@ -305,50 +314,7 @@ namespace ZeldaOnline
 
 		}
 
-		void AddPlayer(Player* player, bool isRefresh)
-		{
-			Scene* old = player->CurrentScene();
-			if (old == this)
-				return;
-			if (old)
-				old->RemovePlayer(player);
-
-			if (!isRefresh && m_players.size() == 0)
-				OnFirstPlayerEnters();
-
-			for (auto& entry : m_players)
-			{
-				entry.second->SendPacket(MakePlayerSpawnPacket(player));
-				player->SendPacket(MakePlayerSpawnPacket(entry.second));
-			}
-
-			std::printf("[trace] scene %llu: add p%d (introducing %zu existing players)\n",
-				m_sceneKey, player->NetworkID(), m_players.size());
-			m_players[player->NetworkID()] = player;
-			player->SetCurrentScene(this);
-
-
-
-		
-			if (m_eventINFFlags.size() > 0)
-				player->SendPacket(newPacket(SERVER_PACKET_INF_FLAGS_LIST) << PackedUInt4(ClientSceneKey()) << BuildEventINFFlagsPacket());
-
-			if(m_INFFlags.size() > 0)
-				player->SendPacket(newPacket(SERVER_PACKET_INF_FLAGS_LIST) << PackedUInt4(ClientSceneKey()) << BuildINFFlagsPacket());
-
-			ByteStream sceneFlagsPacket = newPacket(SERVER_PACKET_SCENE_FLAGS);
-			sceneFlagsPacket << PackedUInt4(ClientSceneKey());
-			sceneFlagsPacket << PackedUInt4(m_sceneFlags);
-			sceneFlagsPacket << PackedUInt4(m_clearFlags);
-			sceneFlagsPacket << PackedUInt4(m_tempFlags);
-			sceneFlagsPacket << PackedUInt4(m_lockedDoorsMask);
-			sceneFlagsPacket << PackedUInt8(m_sessionID);
-
-
-			player->SendPacket(sceneFlagsPacket);
-			SendSceneScopedActors(player);
-			AdoptOwnerlessActors(player);
-		}
+		void AddPlayer(Player* player, bool isRefresh);
 
 		void RemovePlayer(Player* player, bool sceneRefresh = false)
 		{

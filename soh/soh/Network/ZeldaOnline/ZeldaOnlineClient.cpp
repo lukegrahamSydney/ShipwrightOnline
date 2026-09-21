@@ -24,7 +24,7 @@
 #include "PacketStrings.hpp"
 #include "assets/objects/gameplay_keep/gameplay_keep.h"
 #include <soh/Extractor/Extract.h>
-
+#include <soh/Enhancements/randomizer/logic.h>
 #include <soh/ActorDB.h>
 #include "soh/Enhancements/PlayerSkin/PlayerSkin.h"
 #include <ship/utils/StringHelper.h>
@@ -1199,15 +1199,15 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 auto tempSceneFlags = packet.Read<PackedUInt4>().value();
                 auto doorMask = packet.Read<PackedUInt4>().value();
                 auto sessionID = packet.Read<PackedUInt8>().value();
-
+                auto keyCount = packet.Read<PackedUInt1>().value();
 
                 if (IsDungeonScene(gPlayState->sceneNum) || IsBossScene(gPlayState->sceneNum)) {
                     //Dungeon has reset since our last visit (or this is a newone)
                     if (sessionID != m_dungeonSessions[sceneKey]) {
                         //Clear our chests, locked doors and keys
-                        gPlayState->actorCtx.flags.chest = 0;
+                        gPlayState->actorCtx.flags.chest = m_savedChests[gPlayState->sceneNum];
                         m_savedSwch = 0U;   
-                        gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] = 0;
+                        gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] = keyCount;
                         m_dungeonSessions[sceneKey] = sessionID;
 
                         static constexpr s32 shadowTempleJarKeyFlag = 1;
@@ -1453,7 +1453,7 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 *should = false;
                 GameInteractor::Instance->UnregisterGameHookForID<GameInteractor::OnVanillaBehavior>(hookId);
             });
-
+            m_blockSceneSetupActors = sceneNum;
             break;
 
 
@@ -1526,26 +1526,16 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
 
         //Anchor
         case SERVER_PACKET_CHEST_OPENED: {
-            if (packet.BytesLeft() < 12)
-                break;
-
             u16 networkID = (u16)(packet.Read<PackedUInt2>().value());
-            u32 sceneKey = packet.Read<PackedUInt4>().value();
+            u32 sceneNum = packet.Read<PackedUInt4>().value();
             s8 roomIndex = (s8)(packet.Read<PackedInt1>().value());
+            u16 mapIndex = packet.Read<PackedUInt2>().value();
             u8 flag = packet.Read<PackedUInt1>().value();
             u16 modId = (u16)(packet.Read<PackedUInt2>().value());
             u16 getItemId = (u16)(packet.Read<PackedUInt2>().value());
 
             if (gPlayState == NULL)
                 break;
-
-            auto localKey =
-                MakeSceneKey(gPlayState->sceneNum, LINK_IS_ADULT ? 1 : 0, GetSceneVariant(gPlayState->sceneNum));
-
-            if (sceneKey != localKey)
-                break;
-
-
 
             GetItemEntry getItemEntry;
             if (modId == MOD_NONE) {
@@ -1557,18 +1547,34 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             if (getItemEntry.getItemId == GI_NONE)
                 break;
 
-            if (!Flags_GetTreasure(gPlayState, flag)) {
+            bool isTreasureSet = false;
+            if (sceneNum == gPlayState->sceneNum)
+                isTreasureSet = gPlayState->actorCtx.flags.chest & (1 << flag);
+            else
+                isTreasureSet = gSaveContext.sceneFlags[sceneNum].chest & (1 << flag);
+
+            if (!isTreasureSet)
+            {
                 if (getItemEntry.modIndex == MOD_NONE) {
                     if (getItemEntry.getItemId == GI_SWORD_BGS) {
                         gSaveContext.bgsFlag = true;
                         gSaveContext.swordHealth = 8;
                     }
+
+                    auto oldMapIndex = gSaveContext.mapIndex;
+                    gSaveContext.mapIndex = mapIndex;
+                    m_skipItemGive = true;
                     Item_Give(gPlayState, static_cast<u8>(getItemEntry.itemId));
+                    m_skipItemGive = false;
+                    gSaveContext.mapIndex = oldMapIndex;
+
                 } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
                     if (getItemEntry.getItemId == RG_ICE_TRAP) {
                         gSaveContext.ship.pendingIceTrapCount++;
                     } else {
+                        m_skipItemGive = true;
                         Randomizer_Item_Give(gPlayState, getItemEntry);
+                        m_skipItemGive = false;
                     }
                 }
 
@@ -1585,10 +1591,12 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
                 }
 
                 GameInteractionEffect::SetSceneFlag effect;
-                effect.parameters[0] = gPlayState->sceneNum;
+                effect.parameters[0] = sceneNum;
                 effect.parameters[1] = FLAG_SCENE_TREASURE;
                 effect.parameters[2] = flag;
                 effect.Apply();
+
+                m_savedChests[sceneNum] |= (1U << flag);
             }
 
             if (getItemEntry.getItemCategory != ITEM_CATEGORY_JUNK) {
@@ -1651,6 +1659,21 @@ void ZeldaOnlineClient::OnIncomingPacket(ByteStream& packet) {
             } catch (const std::exception& e) { printf("ZeldaOnline: bad party settings (%s)\n", e.what()); }
         } break;
 
+        case CLIENT_PACKET_UPDATE_DUNGEON_KEYS: {
+            auto mapIndex = packet.Read<PackedUInt1>().value();
+            auto count = packet.Read<PackedUInt1>().value();
+            if (mapIndex < 19)
+                gSaveContext.inventory.dungeonKeys[mapIndex] = count;
+            
+        } break;
+
+        case SERVER_PACKET_UPDATE_DUNGEON_KEYS: {
+            auto mapIndex = packet.Read<PackedUInt1>().value();
+            auto count = packet.Read<PackedUInt1>().value();
+
+            if (mapIndex < 19)
+                gSaveContext.inventory.dungeonKeys[mapIndex] = count;
+        } break;
         default:
             SPDLOG_DEBUG("[ZeldaOnline] unhandled server packet id {}", serverPacketID);
             break;
@@ -1946,6 +1969,37 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
         actor->destroy = HorsePuppet_Destroy;
     });
 
+    COND_HOOK(OnDungeonKeyUsed, enabled, [&](uint16_t mapIndex) {
+        WritePacket(newPacket(CLIENT_PACKET_UPDATE_DUNGEON_KEYS)
+                    << PackedUInt1(gSaveContext.mapIndex)
+                    << PackedUInt1(gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex]));
+    });
+
+    COND_HOOK(OnItemReceive, isConnected, [&](GetItemEntry itemEntry) {
+        if (m_skipItemGive)
+            return;
+
+        if (itemEntry.modIndex == MOD_NONE)
+        {
+            if (itemEntry.itemId == ITEM_KEY_SMALL) {
+                WritePacket(newPacket(CLIENT_PACKET_UPDATE_DUNGEON_KEYS)
+                            << PackedUInt1(gSaveContext.mapIndex)
+                            << PackedUInt1(gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex]));
+                return;
+            }
+        }
+
+        else {
+            RandomizerGet item = (RandomizerGet)itemEntry.getItemId;
+ 
+            if ((item >= RG_FOREST_TEMPLE_SMALL_KEY) && (item <= RG_GANONS_CASTLE_SMALL_KEY)) {
+                auto mapIndex = Rando::Logic::RandoGetToDungeonScene.at(item);
+                if (mapIndex >= 0 && mapIndex < 19) {
+                    WritePacket(newPacket(CLIENT_PACKET_UPDATE_DUNGEON_KEYS) << PackedUInt1(mapIndex) << PackedUInt1(gSaveContext.inventory.dungeonKeys[mapIndex]));
+                }
+            }
+        }
+    });
 
     COND_HOOK(OnFlagSet, enabled, [&](s16 flagType, s16 flag) {
         if (gPlayState == NULL)
@@ -1984,8 +2038,9 @@ void ZeldaOnlineClient::RegisterHooks(bool enabled) {
 
                 EnBox* chest = (EnBox*)actor;
                 ByteStream packet = newPacket(CLIENT_PACKET_CHEST_OPENED);
-                packet << PackedUInt4(sceneKey);
+                packet << PackedUInt4(gPlayState->sceneNum);
                 packet << PackedInt1((gPlayState->roomCtx.curRoom.num));
+                packet << PackedUInt2(gSaveContext.mapIndex);
                 packet << PackedUInt1((u8)(flag));
                 packet << PackedUInt2((u16)(chest->getItemEntry.modIndex));
                 packet << PackedUInt2((u16)(chest->getItemEntry.getItemId));
@@ -2803,6 +2858,7 @@ bool ZeldaOnlineClient::RequestRoomSceneChange(bool roomTransition) {
     packet << PackedUInt2((u16)(GetSceneVariant(gPlayState->sceneNum)));
     packet << PackedInt1((s8)(roomIndex));
     packet << PackedInt4(gSaveContext.entranceIndex);
+    packet << PackedUInt2(gSaveContext.mapIndex);
     packet << PackedUInt1(roomTransition ? 1u : 0u);
 
     if (!roomTransition)

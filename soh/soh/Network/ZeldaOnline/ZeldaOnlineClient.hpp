@@ -97,12 +97,12 @@ class ZeldaOnlineClient : public ZNetworking {
     uint32_t m_savedSwch = 0U;              //We save the current scenes flags in OnSceneInit so we can reapply the locked doors
     int m_blockSceneSetupActors = -1;
     int m_keepAliveTimer = 20 * 3;
-
+    bool m_skipItemGive = false;
     ResourceDownloader m_downloader;
     std::string m_fileServerUrl;
 
     std::unordered_map<unsigned int, uint64_t> m_dungeonSessions;
-
+    std::unordered_map<unsigned int, uint32_t> m_savedChests;
     RequestRoomSceneChange m_roomSceneChange = RequestRoomSceneChange::RequestRoomSceneChangeNone;
 
     void ReportBandwidth();

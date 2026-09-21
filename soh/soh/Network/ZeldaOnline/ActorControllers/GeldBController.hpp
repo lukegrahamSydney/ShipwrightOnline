@@ -3,6 +3,7 @@
 
 #include <cstring>
 
+#include <soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h>
 #include "../AbstractActorController.hpp"
 
 extern "C" {
@@ -53,6 +54,21 @@ class GeldBController : public AbstractActorController {
 
             AbstractActorController::InstallCustomInit(actor, GeldBController::ReplacementInit);
         });
+
+        {
+            static HOOK_ID hookId = 0;
+            GameInteractor::Instance->UnregisterGameHookForID<GameInteractor::OnVanillaBehavior>(hookId);
+
+            if (enabled) {
+                hookId = GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnVanillaBehavior>(
+                    VB_GERUDO_FIGHTER_CONTINUE_WAITING, [](GIVanillaBehavior, bool* should, va_list args) {
+                        EnGeldB* gb = va_arg(args, EnGeldB*);
+
+                        if (!gb->invisible)
+                            *should = false;
+                    });
+            }
+        }
     }
 
     static void ReplacementInit(Actor* thisx, PlayState* play) {
@@ -340,7 +356,8 @@ class GeldBController : public AbstractActorController {
         gb->blockCollider.base.acFlags &= ~(AC_HIT | AC_BOUNCED);
         gb->swordCollider.base.atFlags &= ~AT_HIT;
 
-        if (gb->actor.xzDistToPlayer < 400.0f && IsLocalPlayerClosest())
+        f32 claimRange = (gb->action == ACT_WAIT && gb->invisible) ? 250.0f : 400.0f;
+        if (gb->actor.xzDistToPlayer < claimRange && IsLocalPlayerClosest())
             ClaimLeadership(CLAIM_REASON_COOLDOWN);
 
         Collider_UpdateCylinder(&gb->actor, &gb->bodyCollider);

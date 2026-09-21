@@ -78,7 +78,7 @@ namespace ZeldaOnline
 			return (int)(m_players.size());
 		}
 
-		Scene* GetOrCreateScene(int sceneNum, int isFuture, int otherVariant, unsigned int partyHash = 0);
+		Scene* GetOrCreateScene(int sceneNum, int isFuture, int otherVariant, uint16_t mapIndex, unsigned int partyHash = 0);
 
 		Scene* GetScene(uint64_t sceneKey);
 
@@ -86,7 +86,7 @@ namespace ZeldaOnline
 			return m_scenes;
 		}
 
-		virtual std::unique_ptr<Scene> CreateScene(int sceneNum, uint64_t key, int isFuture, int otherVariant)
+		virtual std::unique_ptr<Scene> CreateScene(int sceneNum, uint64_t key, int isFuture, int otherVariant, uint16_t mapIndex)
 		{
 			std::unique_ptr<Scene> scene;
 
@@ -94,27 +94,27 @@ namespace ZeldaOnline
 			{
 
 			case Scenes::SCENE_BOMBCHU_BOWLING_ALLEY:
-				scene = std::make_unique<BombchuAlleyScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<BombchuAlleyScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 
 			case Scenes::SCENE_JABU_JABU:
-				scene = std::make_unique<JabuScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<JabuScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 
 			case Scenes::SCENE_KAKARIKO_VILLAGE:
-				scene = std::make_unique<KakarikoScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<KakarikoScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 
 			case Scenes::SCENE_WATER_TEMPLE:
-				scene = std::make_unique<WaterTempleScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<WaterTempleScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 
 			case Scenes::SCENE_SPIRIT_TEMPLE_BOSS:
-				scene = std::make_unique<SpiritTempleBossScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<SpiritTempleBossScene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 
 			default:
-				scene = std::make_unique<Scene>(this, &m_actors, key, sceneNum, isFuture, otherVariant);
+				scene = std::make_unique<Scene>(this, &m_actors, key, sceneNum, isFuture, otherVariant, mapIndex);
 				break;
 			}
 
@@ -124,6 +124,14 @@ namespace ZeldaOnline
 		}
 
 		void SetPlayerParty(Player* player, std::shared_ptr<Party> party);
+
+		bool DungeonsReset() const {
+			return m_dungeonsReset;
+		}
+
+		int DungeonsResetTimer() const {
+			return m_dungeonsResetTimer;
+		}
 
 	protected:
 		virtual void onClientConnected(ClientConnection* connection);
@@ -182,6 +190,8 @@ namespace ZeldaOnline
 		std::unordered_map<int, std::unique_ptr<Player>> m_players;
 
 		std::unordered_map<uint64_t, std::unique_ptr<Scene>> m_scenes;
+		bool m_dungeonsReset = true;
+		int m_dungeonsResetTimer = 10;
 
 		ActorRegistry m_actors;
 		std::vector<PlayerSkin> m_skins;

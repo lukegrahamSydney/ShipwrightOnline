@@ -67,6 +67,7 @@ namespace ZeldaOnline
 			soxCloseSocket(m_listenSocket);
 		soxCleanup();
 	}
+	
 	void OOTServer::LoadConfig()
 	{
 		try
@@ -88,6 +89,8 @@ namespace ZeldaOnline
 
 			m_daySpeed = (unsigned int)cfg.value("daySpeed", 320);
 			m_nightSpeed = (unsigned int)cfg.value("nightSpeed", 640);
+			m_dungeonsReset = cfg.value("dungeonsReset", true);
+			m_dungeonsResetTimer = cfg.value("dungeonsResetTimer", 10);
 
 			if (cfg.contains("skins") && cfg["skins"].is_array())
 			{
@@ -122,6 +125,8 @@ namespace ZeldaOnline
 
 		std::printf("Day Speed: %u (units per second)\n", m_daySpeed);
 		std::printf("Night Speed: %u (units per second)\n", m_nightSpeed);
+		std::printf("Dungeons Reset: %s\n", m_dungeonsReset ? "true" : "false");
+		std::printf("Dungeons Reset Timer: %i (minutes)\n", m_dungeonsResetTimer);
 		std::printf("Using port %d (override with --port <number>)\n", m_port);
 
 		m_listenSocket = soxCreateTcpSocket();
@@ -179,7 +184,7 @@ namespace ZeldaOnline
 		return it != m_players.end() ? it->second.get() : nullptr;
 	}
 
-	Scene* OOTServer::GetOrCreateScene(int sceneNum, int isFuture, int otherVariant, unsigned int partyHash)
+	Scene* OOTServer::GetOrCreateScene(int sceneNum, int isFuture, int otherVariant, uint16_t mapIndex, unsigned int partyHash)
 	{
 		static const int MAX_SCENE_NUM = 0x6D;
 
@@ -197,7 +202,7 @@ namespace ZeldaOnline
 		if (it != m_scenes.end())
 			return it->second.get();
 
-		auto scene = CreateScene(sceneNum, key, isFuture, otherVariant);
+		auto scene = CreateScene(sceneNum, key, isFuture, otherVariant, mapIndex);
 		Scene* raw = scene.get();
 		m_scenes.emplace(key, std::move(scene));
 		return raw;
@@ -769,20 +774,12 @@ namespace ZeldaOnline
 
 		case CLIENT_PACKET_SET_ROOM_SCENE:
 		{
-			static const unsigned int CHANGE_ROOM_SIZE = 2 + 1 + 2 + 1 + 4 + 1;
-			if (data.BytesLeft() < CHANGE_ROOM_SIZE)
-			{
-				std::printf("OOTServer: malformed CHANGE_ROOM from player %d (%u bytes)\n",
-					player->NetworkID(), data.BytesLeft());
-				break;
-			}
-
 			int sceneNum = (int)(data.Read<PackedUInt2>().value());
 			int isFuture = (int)(data.Read<PackedUInt1>().value());
 			int otherVariant = (int)(data.Read<PackedUInt2>().value());
 			int roomIndex = (int)(data.Read<PackedUInt1>().value());
 			int entranceID = data.Read<PackedInt4>().value();
-
+			uint16_t mapIndex = data.Read<PackedUInt2>().value();
 			bool roomTransition = data.Read<PackedUInt1>().value() == 1;
 
 			uint32_t sceneFlags = 0U;
@@ -803,7 +800,7 @@ namespace ZeldaOnline
 				player->CurrentRoom() ? player->CurrentRoom()->RoomIndex() : -1);
 
 			auto oldScene = player->CurrentScene();
-			Scene* scene = GetOrCreateScene(sceneNum, isFuture, otherVariant, player->PartyHash());
+			Scene* scene = GetOrCreateScene(sceneNum, isFuture, otherVariant, mapIndex, player->PartyHash());
 			if (scene == nullptr)
 				break;
 
@@ -1258,8 +1255,12 @@ namespace ZeldaOnline
 
 			if (lockedDoor)
 			{
-				scene->AppendLockedDoorMask(flag);
-				return;
+				if (scene->PartyID() == 0)
+				{
+					scene->AppendLockedDoorMask(flag);
+					return;
+				}
+				
 			}
 
 			if (flagType == kFlagTypeSceneSwitch && flag >= 0x20)
@@ -1828,32 +1829,24 @@ namespace ZeldaOnline
 
 		case CLIENT_PACKET_CHEST_OPENED:
 		{
-			if (data.BytesLeft() < 10)
-			{
-				std::printf("OOTServer: malformed CHEST_OPENED from player %d\n", player->NetworkID());
-				break;
-			}
-
-			uint32_t sceneKey = data.Read<PackedUInt4>().value();
+			uint32_t sceneIndex = data.Read<PackedUInt4>().value();
 			int roomIndex = (int)(data.Read<PackedInt1>().value());
+			uint16_t mapIndex = data.Read<PackedUInt2>().value();
 			unsigned int flag = data.Read<PackedUInt1>().value();
 			unsigned int modId = data.Read<PackedUInt2>().value();
 			unsigned int getItemId = data.Read<PackedUInt2>().value();
 
-			Scene* scene = player->CurrentScene();
-			if (scene == nullptr || scene->ClientSceneKey() != sceneKey)
-				break;
-
 			ByteStream packet = newPacket(SERVER_PACKET_CHEST_OPENED);
 			packet << PackedUInt2(player->NetworkID());
-			packet << PackedUInt4(sceneKey);
+			packet << PackedUInt4(sceneIndex);
 			packet << PackedInt1(roomIndex);
+			packet << PackedUInt2(mapIndex);
 			packet << PackedUInt1(flag);
 			packet << PackedUInt2(modId);
 			packet << PackedUInt2(getItemId);
 
 			if (auto& party = player->GetParty())
-				party->SendToScene(scene, packet, player);
+				party->SendToAll(packet, player);
 		}
 		break;
 
@@ -1880,6 +1873,19 @@ namespace ZeldaOnline
 
 			party->SetSettings(data.BytesLeft() ? data.ReadString(data.BytesLeft()) : std::string());
 			party->SendToAll(newPacket(SERVER_PACKET_UPDATE_PARTY_SETTINGS) << party->Settings(), player);
+		}
+		break;
+
+		case CLIENT_PACKET_UPDATE_DUNGEON_KEYS:
+		{
+			auto mapIndex = (uint8_t)data.Read<PackedUInt1>().value();
+			auto count = (int)data.Read<PackedUInt1>().value();
+
+			if (auto party = player->GetParty())
+			{
+				party->SetDungeonKeys(mapIndex, count);
+				party->SendToAll(newPacket(SERVER_PACKET_UPDATE_DUNGEON_KEYS) << PackedUInt1(mapIndex) << PackedUInt1(party->DungeonKeys(mapIndex)), player);
+			}
 		}
 		break;
 

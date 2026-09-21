@@ -38,7 +38,7 @@ extern "C" {
 #include "src/overlays/actors/ovl_Object_Kankyo/z_object_kankyo.h"
 #include "src/overlays/actors/ovl_Demo_Gj/z_demo_gj.h"
 #include "objects/object_gj/object_gj.h"
-
+#include "src/overlays/actors/ovl_En_Door/z_en_door.h"
 
 static const s32 sKankyoTrialFlags[6] = {
     EVENTCHKINF_COMPLETED_FOREST_TRIAL, EVENTCHKINF_COMPLETED_WATER_TRIAL, EVENTCHKINF_COMPLETED_SHADOW_TRIAL,
@@ -100,6 +100,7 @@ void ObjLightswitch_SetupTurnOn(ObjLightswitch* thisx);
 void BgJyaBombchuiwa_WaitForExplosion(BgJyaBombchuiwa* thisx, PlayState* play);
 s32 DemoKekkai_CheckEventFlag(s32 params);
 void DemoGj_InitCommon(DemoGj* thisx, PlayState* play, CollisionHeader* header);
+void EnDoor_Idle(EnDoor* thisx, PlayState* play);
 }
 
 namespace ZeldaOnline {
@@ -186,6 +187,7 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
         p << PackedInt2(arrow->actor.params);
         p << PackedFloat4(arrow->actor.speedXZ);
         p << PackedFloat4(arrow->actor.velocity.y);
+        p << PackedUInt1(CVarGetInteger("gZeldaOnline.Pvp", 0));
         SendSceneTrigger("arrow", p);
     });
 
@@ -213,6 +215,7 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
         p << PackedInt2(arrow->actor.params);
         p << PackedFloat4(arrow->actor.speedXZ);
         p << PackedFloat4(arrow->actor.velocity.y);
+        p << PackedUInt1(CVarGetInteger("gZeldaOnline.Pvp", 0));
         SendSceneTrigger("arrow", p);
     });
 
@@ -376,6 +379,14 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
         }
     });
 
+    COND_ID_HOOK(ShouldActorUpdate, ACTOR_EN_DOOR, isConnected, [&](void* refActor, bool* should) {
+        EnDoor* actor = static_cast<EnDoor*>(refActor);
+
+        if (actor->actionFunc == EnDoor_Idle && Flags_GetSwitch(gPlayState, actor->actor.params & 0x3F)) {
+            DECR(actor->lockTimer);
+        }
+    });
+
     
 
     COND_ID_HOOK(ShouldActorUpdate, ACTOR_OBJ_TIMEBLOCK, enabled, [&](void* refActor, bool* should) {
@@ -418,27 +429,41 @@ void ZeldaOnlineClient::RegisterActorHooks(bool enabled) {
         water->prevSwitchFlagSet = switchFlagSet;
     });
 
-
     COND_ID_HOOK(ShouldActorUpdate, ACTOR_OBJ_WARP2BLOCK, enabled, [&](void* refActor, bool* should) {
         ObjWarp2block* block = static_cast<ObjWarp2block*>(refActor);
 
         if (block->actionFunc != func_80BA2610)
             return;
-        if (block->unk_16C > 0 || block->unk_170 > 0)
-            return;
 
         bool flagNow = Flags_GetSwitch(gPlayState, block->dyna.actor.params & 0x3F) != 0;
+
+        if (!(block->dyna.actor.flags & ACTOR_FLAG_ZO_USER2)) {
+            block->dyna.actor.flags |= ACTOR_FLAG_ZO_USER2;
+
+            if (flagNow)
+                block->dyna.actor.flags |= ACTOR_FLAG_ZO_USER1;
+            else
+                block->dyna.actor.flags &= ~ACTOR_FLAG_ZO_USER1;
+
+            return;
+        }
+
+        if (block->unk_170 > 0)
+            return;
+
+        if (block->unk_16C > 0) {
+            if (flagNow)
+                block->dyna.actor.flags |= ACTOR_FLAG_ZO_USER1;
+            else
+                block->dyna.actor.flags &= ~ACTOR_FLAG_ZO_USER1;
+
+            return;
+        }
+
         bool flagWas = (block->dyna.actor.flags & ACTOR_FLAG_ZO_USER1) != 0;
 
         if (flagNow == flagWas)
             return;
-
-        // Our own SwapWithChild will toggle the flag back in 12 frames, so
-        // record what it will be THEN, not what it is now.
-        if (!flagNow)
-            block->dyna.actor.flags |= ACTOR_FLAG_ZO_USER1;
-        else
-            block->dyna.actor.flags &= ~ACTOR_FLAG_ZO_USER1;
 
         ObjWarp2block_Spawn(block, gPlayState);
         block->unk_16C = 0xA0;

@@ -1,21 +1,31 @@
 {
 	"daySpeed": 160,
 	"nightSpeed": 320,
+	
+	"dungeonsReset": true,   "_comment":"If you're using a randomizer, set dungeonsReset to false.",
+	"dungeonsResetTimer": 10,  "_comment":"Minutes after the last person leaves before the dungeon resets",
+	
 	"skins": [
-	  { "displayName": "Link", "referenceName": "link" },
-	  { "displayName": "YoungLinkPants By Sky Blue", "referenceName": "YoungLinkPants" },
-	  { "displayName": "MMLink By nickelndime246", "referenceName": "MMLink" },
-	  { "displayName": "FierceDeity By nickelndime246", "referenceName": "FierceDeity" },
-	  { "displayName": "Amara64 by Jameriquiah", "referenceName": "amara64" },
-	  { "displayName": "Christmas Malon by MalonRose", "referenceName": "christmalon" },
-	  { "displayName": "Linkle by DanatheElf", "referenceName": "linkle" },
-	  { "displayName": "Kris by BanzMarten", "referenceName": "kris" },
-	  { "displayName": "Malon by MalonRose", "referenceName": "malon1" },
-	  { "displayName": "Mario by cy888", "referenceName": "mario" },
-	  { "displayName": "Turezi by Emkay", "referenceName": "turezi" },
-	  { "displayName": "Malon (alt) by ascendantlight", "referenceName": "malon2" },
-	  { "displayName": "Zelda by BungleTavern", "referenceName": "zelda" },
-	  { "displayName": "MasterChief By PxExYxTxOxN", "referenceName": "MasterChief" }
-
+	  { "displayName": "Link", "referenceName": "link", "pitch": 1.0 },
+	  { "displayName": "3DSLink By MalonRose", "referenceName": "3DSLink", "pitch": 1.0  },
+	  { "displayName": "YoungLinkPants By Sky Blue", "referenceName": "YoungLinkPants", "pitch": 1.0 },
+	  { "displayName": "MMLink By nickelndime246", "referenceName": "MMLink", "pitch": 1.0 },
+	  { "displayName": "FierceDeity By nickelndime246", "referenceName": "FierceDeity", "pitch": 1.0 },
+	  { "displayName": "Amara64 by Jameriquiah", "referenceName": "amara64", "pitch": 1.15 },
+	  { "displayName": "Christmas Malon by MalonRose", "referenceName": "christmalon", "pitch": 1.15 },
+	  { "displayName": "Linkle by DanatheElf", "referenceName": "linkle", "pitch": 1.15 },
+	  { "displayName": "Saria By MalonRose", "referenceName": "Saria", "pitch": 1.15  },
+	  { "displayName": "Kris by BanzMarten", "referenceName": "kris", "pitch": 1.0 },
+	  { "displayName": "Malon by MalonRose", "referenceName": "malon1", "pitch": 1.15},
+	  { "displayName": "Mario by cy888", "referenceName": "mario", "pitch": 1.0 },
+	  { "displayName": "Turezi by Emkay", "referenceName": "turezi", "pitch": 1.15 },
+	  { "displayName": "Malon (alt) by ascendantlight", "referenceName": "malon2", "pitch": 1.15 },
+	  { "displayName": "Zelda by BungleTavern", "referenceName": "zelda", "pitch": 1.15 },
+	  { "displayName": "MasterChief By PxExYxTxOxN", "referenceName": "MasterChief", "pitch": 1.0 },
+	  { "displayName": "3DSLinkNoHat By MalonRose", "referenceName": "3DSLinkNoHat", "pitch": 1.0  },
+	  { "displayName": "TPLink By PurpleHato", "referenceName": "TPLink", "pitch": 1.15  },
+	  { "displayName": "Bombchu Girl (Adult) By theinsanebanana", "referenceName": "BombchuGirl", "pitch": 1.15},
+	  { "displayName": "Kafei By ascendantlight", "referenceName": "Kafei", "pitch": 1.15 },
+	  { "displayName": "Waluigi By Batts Electronics", "referenceName": "Waluigi", "pitch": 1.0}
 	]
 }

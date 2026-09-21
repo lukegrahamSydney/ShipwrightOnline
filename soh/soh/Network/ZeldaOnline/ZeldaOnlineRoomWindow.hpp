@@ -44,6 +44,7 @@ enum class PlayerListAction {
     TeleportTo,
     ChangeSkin,
     ToggleSkinPitch,
+    SetPvp,
     ChangeName,
     Connect,
     Disconnect,
@@ -99,6 +100,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
     float m_chatBoxAnim = 0.0f;
     bool m_chatBoxFocus = false;
     bool m_applySkinPitch = true;
+    bool m_pvpEnabled = false;
     bool m_chatSettingsLoaded = false;
     bool m_chatKeyboardShown = false;
     bool m_chatKeyboardProbed = false;
@@ -302,7 +304,8 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                                        "Enemy Health Weight %.1f", ImGuiSliderFlags_AlwaysClamp);
 
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                        ImGui::SetTooltip("Health weight for regular enemies.\nHealth increases by 0.25 x Party Size x Weight");
+                        ImGui::SetTooltip(
+                            "Health weight for regular enemies.\nHealth increases by 0.25 x Party Size x Weight");
 
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     ImGui::SliderFloat("##zo_boss_health_weight", &m_partySettings.bossHealthWeight, 0.0f, 5.0f,
@@ -513,6 +516,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
             return;
 
         m_applySkinPitch = CVarGetInteger("gZeldaOnline.ApplySkinPitch", 1) != 0;
+        m_pvpEnabled = CVarGetInteger("gZeldaOnline.Pvp", 0) != 0;
         m_chatButtonShown = CVarGetInteger("gZeldaOnline.ChatButton", 0) != 0;
         m_chatButtonX = CVarGetFloat("gZeldaOnline.ChatButtonX", -1.0f);
         m_chatButtonY = CVarGetFloat("gZeldaOnline.ChatButtonY", -1.0f);
@@ -595,6 +599,11 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         return 1.0f;
     }
 
+    void SavePvpEnabled() {
+        CVarSetInteger("gZeldaOnline.Pvp", m_pvpEnabled ? 1 : 0);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+
     void SaveApplySkinPitch() {
         CVarSetInteger("gZeldaOnline.ApplySkinPitch", m_applySkinPitch ? 1 : 0);
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
@@ -640,6 +649,30 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(m_chatButtonShown ? "Hide chat button" : "Show chat button");
+    }
+
+    void DrawPvpToggleButton(PlayerListActionEventToggle& toggleEvent, PlayerListActionEvent*& pending) {
+        ImGui::SameLine();
+
+        if (m_pvpEnabled) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+
+        if (ImGui::Button(ICON_FA_CROSSHAIRS "##zo_pvp_toggle")) {
+            m_pvpEnabled = !m_pvpEnabled;
+            SavePvpEnabled();
+
+            toggleEvent.actionEvent.action = PlayerListAction::SetPvp;
+            toggleEvent.enabled = m_pvpEnabled;
+            pending = &toggleEvent.actionEvent;
+        }
+
+        if (m_pvpEnabled)
+            ImGui::PopStyleColor(2);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(m_pvpEnabled ? "PvP enabled" : "PvP disabled");
     }
 
     void HandleChatHotkey() {
@@ -877,6 +910,15 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
 
     PartySettings& GetPartySettings() {
         return m_partySettings;
+    }
+
+    void SetPvpEnabled(bool enabled) {
+        m_pvpEnabled = enabled;
+        SavePvpEnabled();
+    }
+
+    bool PvpEnabled() const {
+        return m_pvpEnabled;
     }
 
     void SetPartyAdminID(uint32_t networkID) {
@@ -1118,6 +1160,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
         PlayerListActionEventConnect connectEvent;
         PlayerListActionEventMultiVar multiVarEvent;
         PlayerListActionEvent actionEvent;
+        PlayerListActionEventToggle toggleEvent;
         PlayerListActionEvent* pending = nullptr;
 
         if (!m_connected) {
@@ -1279,6 +1322,7 @@ class ZeldaOnlineRoomWindow : public Ship::GuiWindow {
                 ImGui::SetTooltip("Unstuck me");
 
             DrawChatToggleButton();
+            DrawPvpToggleButton(toggleEvent, pending);
 
             ImGui::PopStyleVar();
 
