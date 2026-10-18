@@ -99,8 +99,8 @@ namespace ZeldaOnline
 
 		uint32_t PartyHash() const {
 
-			if (m_party != nullptr)
-				return m_party->PrivateDungeons();
+			if (m_party != nullptr && m_party->PrivateDungeons())
+				return m_party->ID();
 			return 0U;
 		}
 
