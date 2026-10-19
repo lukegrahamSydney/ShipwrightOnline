@@ -5,6 +5,9 @@ LATEST RELEASE IS HERE: https://github.com/lukegrahamSydney/ShipwrightOnline/rel
 
 https://youtu.be/BCDZvdghA6A?si=D5fk3nhATs81vnCC
 
+Discussion on discord:
+https://discord.com/channels/808039310850130000/1535513710783627317
+
 <img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/9d737741-d8ca-4d7c-bf03-0547e75d3ab9" />
 
 <img width="1073" height="803" alt="image" src="https://github.com/user-attachments/assets/4a272801-bbf2-4615-ba7e-dc672440cf54" />
